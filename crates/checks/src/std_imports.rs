@@ -1,4 +1,4 @@
-//! `use std::` imports in files that also use `#[contractimpl]` — these break the `no_std` WASM build.
+//! `use std::` imports in files that also use Soroban contract attributes — these break the `no_std` WASM build.
 
 use crate::{Check, Finding, Severity};
 use syn::File;
@@ -16,7 +16,7 @@ impl Check for ForbiddenStdImportsCheck {
 
     fn run(&self, _file: &File, source: &str) -> Vec<Finding> {
         let mut out = Vec::new();
-        if !source.contains("#[contractimpl]") {
+        if !source.contains("#[contractimpl]") && !source.contains("#[contract]") {
             return out;
         }
         for (idx, line) in source.lines().enumerate() {

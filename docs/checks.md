@@ -104,24 +104,24 @@ Names like `set_owner` strongly suggest privilege; without any auth call the sca
 
 ---
 
-## `missing-ttl-extension` (Medium)
+## `forbidden-std-imports` (High)
 
-**Status:** Phase 3
+**Status:** Phase 2
 
 **What it detects**
 
-In `#[contractimpl]` methods: writes to persistent storage through `env.storage().persistent().set(...)` or `.append(...)` without a matching `extend_ttl(...)` or `bump(...)` call on the same storage tier in the same function body.
+Files that contain `#[contract]` or `#[contractimpl]` and also import from `std` with paths such as `use std::...` or `use ::std::...`.
 
 **Why it matters**
 
-Persistent ledger entries expire. Writing data without extending its TTL risks the entry being evicted, which can cause a later `get` to return `None` for data the contract expects to be present.
+Soroban contracts compile to WASM with `#![no_std]`. Importing from `std` causes a compile error for WASM targets and indicates that the contract cannot be deployed as-is.
 
 **Limitations**
 
-- Only the immediate function body is analyzed.
-- TTL extensions performed in helper functions are not tracked.
+- This is a file-level check only.
+- It does not detect transitive `std` usage through re-exported types.
 
-**Fixture:** `test-contracts/ttl-vulnerable/`, `test-contracts/ttl-safe/`
+**Fixture:** To be added; see issue #117.
 
 ---
 

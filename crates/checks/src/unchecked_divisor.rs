@@ -65,7 +65,7 @@ impl<'ast> Visit<'ast> for DivisorExprVisitor {
                     function_name: self.current_function_name.clone(),
                     description,
                     rule_url: None,
-                    fix_hint: Some(
+                    suggestion: Some(
                         "Use checked_div or validate divisor > 0 before division".to_string(),
                     ),
                 });
