@@ -27,24 +27,24 @@ struct RandomnessVisitor {
 impl<'ast> Visit<'ast> for RandomnessVisitor {
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
         let method_name = node.method.to_string();
-        if (method_name == "timestamp" || method_name == "sequence")
-            && is_ledger_receiver(&node.receiver)
-        {
-            self.findings.push(Finding {
-                check_name: CHECK_NAME.to_string(),
-                severity: Severity::High,
-                file_path: String::new(),
-                line: node.span().start().line,
-                function_name: String::new(),
-                description: format!(
-                    "env.ledger().{}() should not be used as randomness source",
-                    method_name
-                ),
-                rule_url: None,
-                suggestion: Some(
-                    "Use oracle services or cryptographic randomness instead".to_string(),
-                ),
-            });
+        if method_name == "timestamp" || method_name == "sequence" {
+            if is_ledger_receiver(&node.receiver) {
+                self.findings.push(Finding {
+                    check_name: CHECK_NAME.to_string(),
+                    severity: Severity::High,
+                    file_path: String::new(),
+                    line: node.span().start().line,
+                    function_name: String::new(),
+                    description: format!(
+                        "env.ledger().{}() should not be used as randomness source",
+                        method_name
+                    ),
+                    rule_url: None,
+                    suggestion: Some(
+                        "Use oracle services or cryptographic randomness instead".to_string(),
+                    ),
+                });
+            }
         }
         visit::visit_expr_method_call(self, node);
     }

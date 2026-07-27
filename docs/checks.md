@@ -104,6 +104,27 @@ Names like `set_owner` strongly suggest privilege; without any auth call the sca
 
 ---
 
+## `forbidden-std-imports` (High)
+
+**Status:** Phase 2
+
+**What it detects**
+
+Files that contain `#[contract]` or `#[contractimpl]` and also import from `std` with paths such as `use std::...` or `use ::std::...`.
+
+**Why it matters**
+
+Soroban contracts compile to WASM with `#![no_std]`. Importing from `std` causes a compile error for WASM targets and indicates that the contract cannot be deployed as-is.
+
+**Limitations**
+
+- This is a file-level check only.
+- It does not detect transitive `std` usage through re-exported types.
+
+**Fixture:** To be added; see issue #117.
+
+---
+
 ## `hardcoded-address` (Medium)
 
 **Status:** Phase 3
@@ -267,7 +288,7 @@ Duplicate storage keys cause silent overwrites. Two contract functions writing d
 - Only compares keys that share the same `#[contractimpl]` block; cross-block duplicates are not detected.
 - Only `symbol_short!` is analyzed; `Symbol::new` with the same string literal is not matched.
 
-**Fixture:** `test-contracts/key-collision-vulnerable/`, `test-contracts/key-collision-safe/`
+**Fixture:** Covered by inline `#[cfg(test)]` unit tests in `crates/checks/src/key_collision.rs`.
 
 ---
 
@@ -288,7 +309,7 @@ Self-transfers waste ledger space, waste the caller's gas, and may indicate a lo
 - Guard detection is structural (presence of a comparison expression in the body); complex guard logic may not be recognized.
 - Only functions with "transfer" or "send" in the name are inspected.
 
-**Fixture:** `test-contracts/transfer-vulnerable/`, `test-contracts/transfer-safe/`
+**Fixture:** `test-contracts/self-transfer-vulnerable/`, `test-contracts/self-transfer-safe/`
 
 ---
 
@@ -462,6 +483,5 @@ Panics abort the transaction with an unhelpful, generic error and can leave the 
 
 - Does not track `unwrap`/`expect` through re-exports or type aliases — only the literal method name is matched.
 - Flags every occurrence regardless of whether the `Option`/`Result` being unwrapped is realistically `None`/`Err` (e.g. immediately after a guarded check).
-- This check is implemented and unit-tested but not yet included in `default_checks()` — it does not currently run as part of a default `soroban-guard` scan.
 
 **Fixture:** `test-contracts/panic-vulnerable/`, `test-contracts/panic-safe/`

@@ -13,6 +13,8 @@ pub mod hardcoded_address;
 pub mod invoke_return;
 pub mod key_collision;
 pub mod large_loop;
+pub mod missing_event_for_admin_change;
+pub mod missing_input_length_bound;
 pub mod missing_nonce;
 pub mod overflow;
 pub mod panics;
@@ -27,7 +29,11 @@ pub mod unsafe_randomness;
 pub mod vec_growth;
 pub mod xc_input;
 pub mod zero_address;
+pub mod unchecked_token_amount;
 pub mod uninitialized_storage_read;
+pub mod unprotected_contract_deployment;
+pub mod unprotected_token_mint;
+pub mod unprotected_upgrade;
 mod util;
 
 pub use admin::UnprotectedAdminCheck;
@@ -43,6 +49,8 @@ pub use hardcoded_address::HardcodedAddressCheck;
 pub use invoke_return::UncheckedInvokeReturnCheck;
 pub use key_collision::SymbolKeyCollisionCheck;
 pub use large_loop::LargeLoopCheck;
+pub use missing_event_for_admin_change::MissingEventForAdminChangeCheck;
+pub use missing_input_length_bound::MissingInputLengthBoundCheck;
 pub use missing_nonce::MissingNonceCheck;
 pub use overflow::UncheckedArithmeticCheck;
 pub use panics::PanicInContractCheck;
@@ -57,7 +65,11 @@ pub use unsafe_randomness::UnsafeRandomnessCheck;
 pub use vec_growth::UnboundedVecGrowthCheck;
 pub use xc_input::UnsafeCrossContractInputCheck;
 pub use zero_address::MissingZeroAddressCheck;
+pub use unchecked_token_amount::UncheckedTokenAmountCheck;
 pub use uninitialized_storage_read::UninitializedStorageReadCheck;
+pub use unprotected_contract_deployment::UnprotectedContractDeploymentCheck;
+pub use unprotected_token_mint::UnprotectedTokenMintCheck;
+pub use unprotected_upgrade::UnprotectedUpgradeCheck;
 
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -212,6 +224,11 @@ pub fn default_checks() -> Vec<Box<dyn Check + Send + Sync>> {
         Box::new(UnboundedVecGrowthCheck),
         Box::new(UnsafeRandomnessCheck),
         Box::new(UncheckedDivisorCheck),
+        Box::new(PanicInContractCheck),
+        Box::new(UnprotectedUpgradeCheck),
+        Box::new(UnprotectedTokenMintCheck),
+        Box::new(UnprotectedContractDeploymentCheck),
+        Box::new(UncheckedTokenAmountCheck),
     ]
 }
 
@@ -245,6 +262,11 @@ pub fn default_checks_with_config(
         Box::new(UnboundedVecGrowthCheck),
         Box::new(UnsafeRandomnessCheck),
         Box::new(UncheckedDivisorCheck),
+        Box::new(PanicInContractCheck),
+        Box::new(UnprotectedUpgradeCheck),
+        Box::new(UnprotectedTokenMintCheck),
+        Box::new(UnprotectedContractDeploymentCheck),
+        Box::new(UncheckedTokenAmountCheck),
     ];
     checks.retain(|c| !disabled.contains(&c.name().to_string()));
     checks

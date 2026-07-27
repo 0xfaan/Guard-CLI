@@ -126,8 +126,8 @@ value identically (i.e. use an optional/nullable field type, not a required one)
 | JSON value | Meaning | CLI exit code |
 |---|---|---|
 | `"high"` | Critical — block deploy / commit | `1` |
-| `"medium"` | Notable — review before release | `0` (unless `--fail-on-any`) |
-| `"low"` | Informational | `0` (unless `--fail-on-any`) |
+| `"medium"` | Notable — review before release | `0` (unless `--fail-on medium` or `--fail-on low`) |
+| `"low"` | Informational | `0` (unless `--fail-on low`) |
 
 ---
 

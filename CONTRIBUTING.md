@@ -5,6 +5,8 @@ Thank you for helping improve the static analyzer. This guide covers **local set
 Read the [architecture overview](docs/architecture.md) first for the crate dependency graph,
 scan data flow, and core types.
 
+Release managers should follow the [crates.io release process](docs/release.md).
+
 ## Local development setup
 
 1. **Install Rust** (1.74 or newer recommended) using [rustup](https://rustup.rs/):

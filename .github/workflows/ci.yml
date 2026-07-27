@@ -28,3 +28,14 @@ jobs:
 
       - name: Build
         run: cargo build --workspace --release
+
+      - name: Check test-contracts fixtures
+        run: |
+          set -e
+          for d in test-contracts/*/; do
+            if [ -f "$d/Cargo.toml" ]; then
+              echo "::group::cargo check $d"
+              (cd "$d" && cargo check)
+              echo "::endgroup::"
+            fi
+          done

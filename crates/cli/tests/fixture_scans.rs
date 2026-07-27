@@ -78,6 +78,21 @@ fn reentrancy_fixtures() {
 }
 
 #[test]
+fn self_transfer_fixtures() {
+    assert_fixture_pair("self-transfer", "self-transfer");
+}
+
+#[test]
+fn std_imports_fixtures() {
+    assert_fixture_pair("std-imports", "forbidden-std-imports");
+}
+
+#[test]
+fn key_collision_fixtures() {
+    assert_fixture_pair("key-collision", "symbol-key-collision");
+}
+
+#[test]
 fn storage_fixtures() {
     assert_fixture_pair("storage", "unsafe-storage-patterns");
 }
@@ -132,7 +147,7 @@ extra = ["drain"]
 
     // Without config: `drain` should NOT be flagged.
     let checks_no_cfg = default_checks_with_config(&[], &[]);
-    let (results_no_cfg, _) =
+    let (results_no_cfg, _, _) =
         scan_directory_with_checks(&root, &[], &[], &checks_no_cfg).unwrap();
     let findings_no_cfg: Vec<_> = results_no_cfg
         .iter()
@@ -146,7 +161,7 @@ extra = ["drain"]
 
     // With config extra name: `drain` SHOULD be flagged.
     let checks_with_cfg = default_checks_with_config(&[], &["drain".to_string()]);
-    let (results_with_cfg, _) =
+    let (results_with_cfg, _, _) =
         scan_directory_with_checks(&root, &[], &[], &checks_with_cfg).unwrap();
     let findings_with_cfg: Vec<_> = results_with_cfg
         .iter()
