@@ -212,6 +212,7 @@ pub fn default_checks() -> Vec<Box<dyn Check + Send + Sync>> {
         Box::new(UnboundedVecGrowthCheck),
         Box::new(UnsafeRandomnessCheck),
         Box::new(UncheckedDivisorCheck),
+        Box::new(PanicInContractCheck),
     ]
 }
 
@@ -245,6 +246,7 @@ pub fn default_checks_with_config(
         Box::new(UnboundedVecGrowthCheck),
         Box::new(UnsafeRandomnessCheck),
         Box::new(UncheckedDivisorCheck),
+        Box::new(PanicInContractCheck),
     ];
     checks.retain(|c| !disabled.contains(&c.name().to_string()));
     checks

@@ -73,9 +73,9 @@ job fails fast on High findings without wasting build minutes.
   run: cargo build --release -p soroban-guard-cli
 
 - name: Soroban Guard scan
-  run: soroban-guard scan . --fail-on-any
-  # Exit code 1 on any finding (High, Medium, or Low) — remove --fail-on-any
-  # to block on High findings only (the default behaviour).
+  run: soroban-guard scan . --fail-on low
+  # Exit code 1 on any finding (High, Medium, or Low) — use --fail-on high
+  # (the default) to block on High findings only.
 ```
 
 ### SARIF upload for GitHub Code Scanning
@@ -201,4 +201,4 @@ args = ["build", "--target", "wasm32-unknown-unknown", "--release"]
 | `1` | At least one High finding | Block deploy / commit |
 | `2` | Scan error (I/O or parse failure) | Investigate and fix |
 
-Use `--fail-on-any` to treat Medium and Low findings as blocking in security-sensitive pipelines.
+Use `--fail-on medium` or `--fail-on low` to treat Medium and/or Low findings as blocking in security-sensitive pipelines.

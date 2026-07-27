@@ -48,12 +48,18 @@ enum Commands {
         /// Only scan files matching this glob pattern (e.g. `src/token*.rs`)
         #[arg(long)]
         include: Option<String>,
+        /// Exclude files matching this glob pattern (e.g. `src/proxy.rs`); may be repeated
+        #[arg(long, value_name = "PATTERN")]
+        exclude: Vec<String>,
         /// Exit code 1 when findings at or above this severity are found (high|medium|low, default: high)
         #[arg(long, default_value = "high")]
         fail_on: String,
         /// Disable a named check (may be repeated)
         #[arg(long, value_name = "CHECK")]
         disable_check: Vec<String>,
+        /// Disable ANSI color output (equivalent to setting NO_COLOR=1)
+        #[arg(long)]
+        no_color: bool,
     },
     /// List the checks that are enabled by default
     ListChecks,
@@ -73,8 +79,10 @@ fn main() {
             quiet,
             verbose,
             include,
+            exclude,
             fail_on,
             disable_check,
+            no_color,
         } => {
             if no_color {
                 colored::control::set_override(false);
@@ -142,10 +150,13 @@ fn main() {
             let active_checks = default_checks_with_config(&all_disabled, extra_sensitive);
 
             let includes: Vec<String> = include.into_iter().collect();
-            match scan_directory_with_checks(&path, &[], &includes, &active_checks) {
-                Ok((findings, files_scanned, files_skipped)) => {
+            match scan_directory_with_checks(&path, &exclude, &includes, &active_checks) {
+                Ok((results, files_scanned, files_skipped)) => {
+                    let findings: Vec<Finding> =
+                        results.into_iter().flat_map(|r| r.findings).collect();
                     let any_high = findings
-                Ok((findings, files_scanned)) => {
+                        .iter()
+                        .any(|f| matches!(f.severity, Severity::High));
                     let should_fail = findings
                         .iter()
                         .any(|f| f.severity <= fail_threshold);
@@ -202,12 +213,6 @@ fn main() {
                             "Skipped {} generated file(s) from analysis.",
                             files_skipped
                         );
-                    }
-
-                    if any_high {
-                    } else if !quiet || should_fail {
-                        let (display, truncated) = truncate(&findings, 0);
-                        print_pretty(display, files_scanned, path.display().to_string(), truncated);
                     }
 
                     if should_fail {
@@ -271,15 +276,6 @@ fn parse_severity(s: &str) -> Severity {
     }
 }
 
-/// Returns (slice to display, count of truncated findings).
-fn truncate(findings: &[Finding], max: usize) -> (&[Finding], usize) {
-    if max == 0 || findings.len() <= max {
-        (findings, 0)
-    } else {
-        (&findings[..max], findings.len() - max)
-    }
-}
-
 fn emit_gha_annotations(findings: &[Finding]) {
     for f in findings {
         let level = match f.severity {
@@ -303,7 +299,7 @@ fn build_sarif(findings: &[Finding]) -> serde_json::Value {
                 "shortDescription": { "text": describe_rule(&finding.check_name) },
                 "fullDescription": { "text": describe_rule(&finding.check_name) },
                 "defaultConfiguration": { "level": severity_to_sarif_level(finding.severity) },
-                "helpUri": "https://github.com/chindosunday/Guard-CLI"
+                "helpUri": "https://github.com/SorobanGuard/Guard-CLI"
             }));
         }
     }
@@ -331,7 +327,7 @@ fn build_sarif(findings: &[Finding]) -> serde_json::Value {
             "tool": {
                 "driver": {
                     "name": "soroban-guard",
-                    "informationUri": "https://github.com/chindosunday/Guard-CLI",
+                    "informationUri": "https://github.com/SorobanGuard/Guard-CLI",
                     "rules": rules
                 }
             },

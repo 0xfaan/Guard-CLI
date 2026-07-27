@@ -132,7 +132,7 @@ extra = ["drain"]
 
     // Without config: `drain` should NOT be flagged.
     let checks_no_cfg = default_checks_with_config(&[], &[]);
-    let (results_no_cfg, _) =
+    let (results_no_cfg, _, _) =
         scan_directory_with_checks(&root, &[], &[], &checks_no_cfg).unwrap();
     let findings_no_cfg: Vec<_> = results_no_cfg
         .iter()
@@ -146,7 +146,7 @@ extra = ["drain"]
 
     // With config extra name: `drain` SHOULD be flagged.
     let checks_with_cfg = default_checks_with_config(&[], &["drain".to_string()]);
-    let (results_with_cfg, _) =
+    let (results_with_cfg, _, _) =
         scan_directory_with_checks(&root, &[], &[], &checks_with_cfg).unwrap();
     let findings_with_cfg: Vec<_> = results_with_cfg
         .iter()

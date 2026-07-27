@@ -65,14 +65,6 @@ pub fn scan_directory(
     excludes: &[String],
     includes: &[String],
 ) -> Result<(Vec<Finding>, usize, usize), ScanError> {
-/// `root` is used only to compute relative file labels in findings (same convention as
-/// [`scan_directory`]). `excludes` are glob patterns matched against each file's path
-/// relative to `root`; matching files are skipped.
-pub fn scan_files(
-    paths: &[PathBuf],
-    root: &Path,
-    excludes: &[String],
-) -> Result<(Vec<Finding>, usize), ScanError> {
     let root = root.canonicalize()?;
 
     // Single-file fast path: skip the directory walk entirely.
@@ -95,8 +87,81 @@ pub fn scan_files(
             })
             .collect();
         findings.sort_by(|a, b| a.line.cmp(&b.line));
-        return Ok((findings, 1));
+        return Ok((findings, 1, 0));
     }
+
+    let exclude_patterns: Vec<glob::Pattern> = excludes
+        .iter()
+        .filter_map(|p| glob::Pattern::new(p).ok())
+        .collect();
+    let include_patterns: Vec<glob::Pattern> = includes
+        .iter()
+        .filter_map(|p| glob::Pattern::new(p).ok())
+        .collect();
+
+    let entries: Vec<PathBuf> = WalkDir::new(&root)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            if !entry.file_type().is_file() {
+                return false;
+            }
+            let path = entry.path();
+            if path
+                .components()
+                .any(|c| matches!(c.as_os_str().to_str(), Some("target" | ".git")))
+            {
+                return false;
+            }
+            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+                return false;
+            }
+            let label = path.strip_prefix(&root).unwrap_or(path);
+            if exclude_patterns
+                .iter()
+                .any(|p| p.matches_path(label) || p.matches_path(path))
+            {
+                return false;
+            }
+            if !include_patterns.is_empty()
+                && !include_patterns
+                    .iter()
+                    .any(|p| p.matches_path(label) || p.matches_path(path))
+            {
+                return false;
+            }
+            true
+        })
+        .map(|e| e.path().to_path_buf())
+        .collect();
+
+    let mut files_skipped = 0;
+    let mut scan_paths = Vec::new();
+    for path in entries {
+        if has_generated_file_header(&path)? {
+            files_skipped += 1;
+            continue;
+        }
+        scan_paths.push(path);
+    }
+
+    // Excludes already applied above; pass empty slice to avoid double-filtering.
+    let (findings, files_scanned) = scan_files(&scan_paths, &root, &[])?;
+
+    Ok((findings, files_scanned, files_skipped))
+}
+
+/// Scan an explicit list of `.rs` file paths and aggregate findings from every check.
+///
+/// `root` is used only to compute relative file labels in findings (same convention as
+/// [`scan_directory`]). `excludes` are glob patterns matched against each file's path
+/// relative to `root`; matching files are skipped.
+pub fn scan_files(
+    paths: &[PathBuf],
+    root: &Path,
+    excludes: &[String],
+) -> Result<(Vec<Finding>, usize), ScanError> {
     let exclude_patterns: Vec<glob::Pattern> = excludes
         .iter()
         .filter_map(|p| glob::Pattern::new(p).ok())
@@ -105,35 +170,27 @@ pub fn scan_files(
     let filtered: Vec<&PathBuf> = paths
         .iter()
         .filter(|path| {
-            let label = path.strip_prefix(root).unwrap_or(path);
+            let label = path.strip_prefix(root).unwrap_or(path.as_path());
             !exclude_patterns
                 .iter()
                 .any(|pat| pat.matches_path(label) || pat.matches_path(path))
         })
-        .map(|entry| entry.path().to_path_buf())
         .collect();
 
-    let mut files_skipped = 0;
-    let mut scan_entries = Vec::new();
-    for entry in entries {
-        let path = entry.path();
-        if has_generated_file_header(path)? {
-            files_skipped += 1;
-            continue;
-        }
-        scan_entries.push(entry);
-    }
-    let files_scanned = scan_entries.len();
-
-    let mut findings: Vec<Finding> = scan_entries
     let files_scanned = filtered.len();
     let checks = default_checks();
 
     let mut findings: Vec<Finding> = filtered
         .par_iter()
-        .map(|entry| {
-            let path = entry.path();
-            let content = std::fs::read_to_string(path)?;
+        .map(|path| {
+            let content = match std::fs::read_to_string(path) {
+                Ok(c) => c,
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    eprintln!("warning: skipping {} — permission denied", path.display());
+                    return Ok(Vec::new());
+                }
+                Err(e) => return Err(ScanError::Io(e)),
+            };
             let syn_file = syn::parse_file(&content).map_err(|e| ScanError::Parse {
                 path: path.to_path_buf(),
                 message: e.to_string(),
@@ -141,7 +198,7 @@ pub fn scan_files(
 
             let file_label = path
                 .strip_prefix(root)
-                .unwrap_or(path)
+                .unwrap_or(path.as_path())
                 .to_string_lossy()
                 .to_string();
 
@@ -188,7 +245,7 @@ pub fn scan_files(
             .then_with(|| a.line.cmp(&b.line))
     });
 
-    Ok((findings, files_scanned, files_skipped))
+    Ok((findings, files_scanned))
 }
 
 /// Findings for a single source file.
@@ -198,74 +255,6 @@ pub struct FileScanResult {
     pub findings: Vec<Finding>,
 }
 
-/// Recursively scan `.rs` files under `root` and aggregate findings from every check.
-///
-/// `excludes` are glob patterns (e.g. `vendor/**`, `**/generated/*.rs`) matched against each
-/// file's path relative to `root`; matching files are skipped entirely.
-///
-/// `includes` are glob patterns; when non-empty only files matching at least one pattern are
-/// scanned. When `includes` is empty all `.rs` files (minus excludes) are scanned.
-pub fn scan_directory(
-    root: &Path,
-    excludes: &[String],
-    includes: &[String],
-) -> Result<(Vec<FileScanResult>, usize), ScanError> {
-    let root = root.canonicalize()?;
-    let exclude_patterns: Vec<glob::Pattern> = excludes
-        .iter()
-        .filter_map(|p| glob::Pattern::new(p).ok())
-        .collect();
-    let include_patterns: Vec<glob::Pattern> = includes
-        .iter()
-        .filter_map(|p| glob::Pattern::new(p).ok())
-        .collect();
-
-    let paths: Vec<PathBuf> = WalkDir::new(&root)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            if !entry.file_type().is_file() {
-                return false;
-            }
-            let path = entry.path();
-            if path
-                .components()
-                .any(|c| matches!(c.as_os_str().to_str(), Some("target" | ".git")))
-            {
-                return false;
-            }
-            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
-                return false;
-            }
-            let label = path.strip_prefix(&root).unwrap_or(path);
-            if exclude_patterns
-                .iter()
-                .any(|p| p.matches_path(label) || p.matches_path(path))
-            {
-                return false;
-            }
-            if !include_patterns.is_empty()
-                && !include_patterns
-                    .iter()
-                    .any(|p| p.matches_path(label) || p.matches_path(path))
-            {
-                return false;
-            }
-            true
-        })
-        .map(|e| e.path().to_path_buf())
-        .collect();
-
-    // Excludes already applied above; pass empty slice to avoid double-filtering.
-    let (mut results, count) = scan_files(&paths, &root, &[])?;
-    for r in &mut results {
-        dedup_findings(&mut r.findings);
-    }
-    results.sort_by(|a, b| a.file_path.cmp(&b.file_path));
-    Ok((results, count))
-}
-
 /// Remove duplicate findings with the same `(file_path, line, check_name)`, keeping the first.
 fn dedup_findings(findings: &mut Vec<Finding>) {
     let mut seen = std::collections::HashSet::new();
@@ -273,12 +262,15 @@ fn dedup_findings(findings: &mut Vec<Finding>) {
 }
 
 /// Like [`scan_directory`] but runs `checks` instead of [`default_checks`].
+///
+/// Returns `(results, files_scanned, files_skipped)`, where `files_skipped` counts files
+/// skipped because they carry a generated-file header (see [`scan_directory`]).
 pub fn scan_directory_with_checks(
     root: &Path,
     excludes: &[String],
     includes: &[String],
     checks: &[Box<dyn Check + Send + Sync>],
-) -> Result<(Vec<FileScanResult>, usize), ScanError> {
+) -> Result<(Vec<FileScanResult>, usize, usize), ScanError> {
     let root = root.canonicalize()?;
     let exclude_patterns: Vec<glob::Pattern> = excludes
         .iter()
@@ -326,8 +318,18 @@ pub fn scan_directory_with_checks(
         .map(|e| e.path().to_path_buf())
         .collect();
 
-    let files_scanned = paths.len();
-    let results: Vec<FileScanResult> = paths
+    let mut files_skipped = 0;
+    let mut scan_paths = Vec::new();
+    for path in paths {
+        if has_generated_file_header(&path)? {
+            files_skipped += 1;
+            continue;
+        }
+        scan_paths.push(path);
+    }
+
+    let files_scanned = scan_paths.len();
+    let results: Vec<FileScanResult> = scan_paths
         .par_iter()
         .map(|path| {
             let content = std::fs::read_to_string(path)?;
@@ -379,7 +381,7 @@ pub fn scan_directory_with_checks(
         .collect::<Result<Vec<_>, ScanError>>()?;
 
     results.sort_by(|a, b| a.file_path.cmp(&b.file_path));
-    Ok((results, files_scanned))
+    Ok((results, files_scanned, files_skipped))
 }
 
 #[cfg(test)]
@@ -400,8 +402,9 @@ mod tests {
         let file_path = dir.join("lib.rs");
         fs::write(&file_path, "pub fn f() {}").unwrap();
 
-        let (_, files_scanned) = scan_directory(&file_path, &[], &[]).unwrap();
+        let (_, files_scanned, files_skipped) = scan_directory(&file_path, &[], &[]).unwrap();
         assert_eq!(files_scanned, 1);
+        assert_eq!(files_skipped, 0);
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -556,7 +559,7 @@ mod dedup_tests {
 
         let checks: Vec<Box<dyn soroban_guard_checks::Check + Send + Sync>> =
             vec![Box::new(DuplicatingCheck)];
-        let (results, _) = scan_directory_with_checks(&root, &[], &[], &checks).unwrap();
+        let (results, _, _) = scan_directory_with_checks(&root, &[], &[], &checks).unwrap();
 
         let total: usize = results.iter().map(|r| r.findings.len()).sum();
         assert_eq!(total, 1, "expected 1 finding after dedup, got {}", total);
@@ -608,7 +611,7 @@ mod dedup_tests {
 
         let checks: Vec<Box<dyn soroban_guard_checks::Check + Send + Sync>> =
             vec![Box::new(ReversedCheck)];
-        let (results, _) = scan_directory_with_checks(&root, &[], &[], &checks).unwrap();
+        let (results, _, _) = scan_directory_with_checks(&root, &[], &[], &checks).unwrap();
 
         // Files must be in lexicographic order.
         let file_paths: Vec<&str> = results.iter().map(|r| r.file_path.as_str()).collect();
