@@ -104,6 +104,27 @@ Names like `set_owner` strongly suggest privilege; without any auth call the sca
 
 ---
 
+## `forbidden-std-imports` (High)
+
+**Status:** Phase 2
+
+**What it detects**
+
+Files that contain `#[contract]` or `#[contractimpl]` and also import from `std` with paths such as `use std::...` or `use ::std::...`.
+
+**Why it matters**
+
+Soroban contracts compile to WASM with `#![no_std]`. Importing from `std` causes a compile error for WASM targets and indicates that the contract cannot be deployed as-is.
+
+**Limitations**
+
+- This is a file-level check only.
+- It does not detect transitive `std` usage through re-exported types.
+
+**Fixture:** To be added; see issue #117.
+
+---
+
 ## `hardcoded-address` (Medium)
 
 **Status:** Phase 3

@@ -1,6 +1,7 @@
 //! Detect `#[contractimpl]` blocks without a corresponding `#[contract]` struct in the same file.
 
 use crate::{Check, Finding, Severity};
+use syn::spanned::Spanned;
 use syn::{Attribute, File, Item};
 
 const CHECK_NAME: &str = "missing-contract-annotation";
@@ -51,7 +52,7 @@ impl Check for MissingContractAnnotationCheck {
                             check_name: CHECK_NAME.to_string(),
                             severity: Severity::Low,
                             file_path: String::new(),
-                            line: 1,
+                            line: imp.span().start().line,
                             function_name: type_name.clone(),
                             description: format!(
                                 "`#[contractimpl]` found for `{type_name}` but no `#[contract]` \

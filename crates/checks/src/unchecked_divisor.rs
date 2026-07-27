@@ -37,7 +37,7 @@ impl<'ast> Visit<'ast> for DivisorVisitor {
                     function_name: String::new(),
                     description,
                     rule_url: None,
-                    fix_hint: Some(
+                    suggestion: Some(
                         "Use checked_div or validate divisor > 0 before division".to_string(),
                     ),
                 });
