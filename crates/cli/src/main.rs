@@ -367,6 +367,13 @@ fn describe_rule(name: &str) -> &'static str {
         "missing-zero-address-check" => "Address argument not validated against the zero address",
         "reentrancy-risk" => "Storage write followed by cross-contract invocation risks reentrancy",
         "panic-in-contract" => "Contract uses panic!, unwrap, or expect which abort the WASM execution",
+        "mutable-global-state" => "Mutable static declarations at module scope are unsafe in Soroban",
+        "re-initialization-risk" => "Init functions should guard against re-entry",
+        "unchecked-invoke-return" => "Cross-contract calls must have their return values checked",
+        "missing-balance-check" => "Token transfers should verify sufficient balance",
+        "unbounded-vec-growth" => "Vecs in storage must have bounded growth to avoid ledger limits",
+        "unsafe-randomness" => "Timestamp and sequence are predictable, not random",
+        "unchecked-divisor" => "Divisor must be validated to be non-zero",
         _ => "Custom check",
     }
 }
@@ -390,6 +397,13 @@ fn describe_check(name: &str) -> (&'static str, &'static str) {
         "missing-zero-address-check" => ("medium", "Flags Address parameters not checked for the zero address"),
         "reentrancy-risk" => ("high", "Flags storage writes followed by cross-contract calls"),
         "panic-in-contract" => ("medium", "Flags panic!, unwrap, and expect in contract methods"),
+        "mutable-global-state" => ("high", "Flags mutable static declarations at module scope"),
+        "re-initialization-risk" => ("high", "Flags init functions without re-entry guards"),
+        "unchecked-invoke-return" => ("medium", "Flags invoke_contract calls with ignored return values"),
+        "missing-balance-check" => ("high", "Flags token transfers without balance validation"),
+        "unbounded-vec-growth" => ("medium", "Flags Vecs that grow without bounds"),
+        "unsafe-randomness" => ("high", "Flags use of timestamp/sequence as randomness"),
+        "unchecked-divisor" => ("high", "Flags division operations with unchecked divisors"),
         _ => ("low", "Custom detector"),
     }
 }
