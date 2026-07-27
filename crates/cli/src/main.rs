@@ -76,9 +76,6 @@ fn main() {
             fail_on,
             disable_check,
         } => {
-            if no_color {
-                colored::control::set_override(false);
-            }
             // Mutual exclusion
             let format_count = [json, sarif, markdown].iter().filter(|&&b| b).count();
             if format_count > 1 {
@@ -144,8 +141,6 @@ fn main() {
             let includes: Vec<String> = include.into_iter().collect();
             match scan_directory_with_checks(&path, &[], &includes, &active_checks) {
                 Ok((findings, files_scanned, files_skipped)) => {
-                    let any_high = findings
-                Ok((findings, files_scanned)) => {
                     let should_fail = findings
                         .iter()
                         .any(|f| f.severity <= fail_threshold);
@@ -186,15 +181,9 @@ fn main() {
                         if !quiet || should_fail {
                             print_markdown(&findings);
                         }
-                    } else {
-                        if !quiet || any_high {
-                            print_pretty(
-                                &findings,
-                                files_scanned,
-                                path.display().to_string(),
-                                0,
-                            );
-                        }
+                    } else if !quiet || should_fail {
+                        let (display, truncated) = truncate(&findings, 0);
+                        print_pretty(display, files_scanned, path.display().to_string(), truncated);
                     }
 
                     if verbose && files_skipped > 0 {
@@ -202,12 +191,6 @@ fn main() {
                             "Skipped {} generated file(s) from analysis.",
                             files_skipped
                         );
-                    }
-
-                    if any_high {
-                    } else if !quiet || should_fail {
-                        let (display, truncated) = truncate(&findings, 0);
-                        print_pretty(display, files_scanned, path.display().to_string(), truncated);
                     }
 
                     if should_fail {
