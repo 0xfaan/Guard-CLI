@@ -267,7 +267,7 @@ Duplicate storage keys cause silent overwrites. Two contract functions writing d
 - Only compares keys that share the same `#[contractimpl]` block; cross-block duplicates are not detected.
 - Only `symbol_short!` is analyzed; `Symbol::new` with the same string literal is not matched.
 
-**Fixture:** `test-contracts/key-collision-vulnerable/`, `test-contracts/key-collision-safe/`
+**Fixture:** Covered by inline `#[cfg(test)]` unit tests in `crates/checks/src/key_collision.rs`.
 
 ---
 

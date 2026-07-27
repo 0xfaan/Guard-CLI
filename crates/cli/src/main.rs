@@ -303,7 +303,7 @@ fn build_sarif(findings: &[Finding]) -> serde_json::Value {
                 "shortDescription": { "text": describe_rule(&finding.check_name) },
                 "fullDescription": { "text": describe_rule(&finding.check_name) },
                 "defaultConfiguration": { "level": severity_to_sarif_level(finding.severity) },
-                "helpUri": "https://github.com/chindosunday/Guard-CLI"
+                "helpUri": "https://github.com/SorobanGuard/Guard-CLI"
             }));
         }
     }
@@ -331,7 +331,7 @@ fn build_sarif(findings: &[Finding]) -> serde_json::Value {
             "tool": {
                 "driver": {
                     "name": "soroban-guard",
-                    "informationUri": "https://github.com/chindosunday/Guard-CLI",
+                    "informationUri": "https://github.com/SorobanGuard/Guard-CLI",
                     "rules": rules
                 }
             },
