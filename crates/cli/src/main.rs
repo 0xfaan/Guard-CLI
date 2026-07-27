@@ -54,11 +54,24 @@ enum Commands {
         /// Disable a named check (may be repeated)
         #[arg(long, value_name = "CHECK")]
         disable_check: Vec<String>,
+        /// Disable ANSI color output (equivalent to setting NO_COLOR=1)
+        #[arg(long)]
+        no_color: bool,
     },
     /// List the checks that are enabled by default
     ListChecks,
     /// Print version and build information
     Version,
+    /// Print full documentation for a named check
+    Explain {
+        /// Name of the check (e.g. `missing-require-auth`)
+        check_name: String,
+    },
+    /// Print shell completion scripts for Bash, Zsh, Fish, or PowerShell
+    Completions {
+        /// Shell to generate completions for
+        shell: Shell,
+    },
 }
 
 fn main() {
@@ -75,6 +88,7 @@ fn main() {
             include,
             fail_on,
             disable_check,
+            no_color,
         } => {
             if no_color {
                 colored::control::set_override(false);

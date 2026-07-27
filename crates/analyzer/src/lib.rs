@@ -54,17 +54,6 @@ pub enum ScanError {
 /// `root` may be a directory **or a single `.rs` file**. When a file path is given it is scanned
 /// directly without any directory walk.
 ///
-/// `excludes` are glob patterns (e.g. `vendor/**`, `**/generated/*.rs`) matched against each
-/// file's path relative to `root`; matching files are skipped entirely.
-///
-/// `includes` are glob patterns; when non-empty only files matching at least one pattern are
-/// scanned. When `includes` is empty all `.rs` files (minus excludes and generated-file
-/// headers) are scanned.
-pub fn scan_directory(
-    root: &Path,
-    excludes: &[String],
-    includes: &[String],
-) -> Result<(Vec<Finding>, usize, usize), ScanError> {
 /// `root` is used only to compute relative file labels in findings (same convention as
 /// [`scan_directory`]). `excludes` are glob patterns matched against each file's path
 /// relative to `root`; matching files are skipped.
@@ -113,19 +102,6 @@ pub fn scan_files(
         .map(|entry| entry.path().to_path_buf())
         .collect();
 
-    let mut files_skipped = 0;
-    let mut scan_entries = Vec::new();
-    for entry in entries {
-        let path = entry.path();
-        if has_generated_file_header(path)? {
-            files_skipped += 1;
-            continue;
-        }
-        scan_entries.push(entry);
-    }
-    let files_scanned = scan_entries.len();
-
-    let mut findings: Vec<Finding> = scan_entries
     let files_scanned = filtered.len();
     let checks = default_checks();
 
@@ -188,7 +164,7 @@ pub fn scan_files(
             .then_with(|| a.line.cmp(&b.line))
     });
 
-    Ok((findings, files_scanned, files_skipped))
+    Ok((findings, files_scanned))
 }
 
 /// Findings for a single source file.
