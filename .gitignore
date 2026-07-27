@@ -1,8 +1,5 @@
 /target
 **/*.rs.bk
 .DS_Store
-web/node_modules
-web/.next
-web/out
 test-contracts/**/target
 test-contracts/**/Cargo.lock

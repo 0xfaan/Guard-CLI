@@ -108,9 +108,6 @@ fn main() {
             disable_check,
             no_color,
         } => {
-            if no_color {
-                colored::control::set_override(false);
-            }
             // Mutual exclusion
             let format_count = [json, sarif, markdown].iter().filter(|&&b| b).count();
             if format_count > 1 {
@@ -182,11 +179,7 @@ fn main() {
                         .iter()
                         .any(|f| matches!(f.severity, Severity::High));
             match scan_directory_with_checks(&path, &[], &includes, &active_checks) {
-                Ok((results, files_scanned)) => {
-                    let findings: Vec<_> = results
-                        .iter()
-                        .flat_map(|r| r.findings.iter().cloned())
-                        .collect();
+                Ok((findings, files_scanned, files_skipped)) => {
                     let should_fail = findings
                         .iter()
                         .any(|f| f.severity <= fail_threshold);
@@ -227,6 +220,9 @@ fn main() {
                         if !quiet || should_fail {
                             print_markdown(&findings);
                         }
+                    } else if !quiet || should_fail {
+                        let (display, truncated) = truncate(&findings, 0);
+                        print_pretty(display, files_scanned, path.display().to_string(), truncated);
                     } else {
                         if !quiet || should_fail {
                             let (display, truncated) = truncate(&findings, 0);
