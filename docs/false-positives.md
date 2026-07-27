@@ -44,7 +44,36 @@ Common causes:
 
 ---
 
-## Workarounds today
+## Inline suppression annotations
+
+Use an inline suppression comment when a finding is intentional and should be ignored locally:
+
+```rust
+// soroban-guard: allow(unchecked-arithmetic)
+let result = a + b;
+```
+
+Rules:
+
+- The comment must appear on the line immediately before the flagged expression or statement.
+- The check name inside `allow(...)` must exactly match the check's `name()` value.
+- Multiple checks can be suppressed with a comma-separated list:
+  `// soroban-guard: allow(delegate-call-risk, missing-event-emission)`
+
+Place the same annotation immediately above a function declaration to suppress that check for all findings reported in that function:
+
+```rust
+// soroban-guard: allow(missing-require-auth)
+pub fn bootstrap(env: Env) {
+    env.storage().instance().set(&KEY, &1u32);
+}
+```
+
+Use suppressions for reviewed false positives only. Prefer fixing the code when the finding identifies a real deployability or security problem.
+
+---
+
+## Other workarounds
 
 ### Disable a check for an entire scan
 
@@ -67,27 +96,6 @@ Use `--exclude` to skip a path pattern entirely:
 ```bash
 cargo run -p soroban-guard-cli -- scan ./my-contract --exclude src/proxy.rs
 ```
-
----
-
-## Planned suppression annotation (issue #149)
-
-A future release will support inline suppression comments so you can silence a specific finding
-for a specific line without disabling the check globally:
-
-```rust
-// soroban-guard: allow(delegate-call-risk)
-let callee: Address = env.storage().persistent().get(&CALLEE_KEY).unwrap();
-```
-
-Rules for the annotation (subject to change before release):
-
-- The comment must appear on the line immediately before the flagged expression.
-- The check name inside `allow(…)` must exactly match the check's `name()` value.
-- Multiple checks can be suppressed with a comma-separated list:
-  `// soroban-guard: allow(delegate-call-risk, missing-event-emission)`
-
-Until this ships, use `--disable-check` or `--exclude` as described above.
 
 ---
 

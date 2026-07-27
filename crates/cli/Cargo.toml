@@ -4,14 +4,19 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "CLI for Soroban Guard smart contract scanner"
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = true
 
 [[bin]]
 name = "soroban-guard"
 path = "src/main.rs"
 
 [dependencies]
-soroban-guard-analyzer = { path = "../analyzer" }
-soroban-guard-checks = { path = "../checks" }
+soroban-guard-analyzer = { path = "../analyzer", version = "0.1.0" }
+soroban-guard-checks = { path = "../checks", version = "0.1.0" }
 clap.workspace = true
 clap_complete = "4.5"
 colored.workspace = true
