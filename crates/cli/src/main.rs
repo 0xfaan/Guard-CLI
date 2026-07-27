@@ -59,6 +59,16 @@ enum Commands {
     ListChecks,
     /// Print version and build information
     Version,
+    /// Print full documentation for a named check
+    Explain {
+        /// Name of the check (e.g. `missing-require-auth`)
+        check_name: String,
+    },
+    /// Print shell completion scripts for Bash, Zsh, Fish, or PowerShell
+    Completions {
+        /// Shell to generate completions for
+        shell: Shell,
+    },
 }
 
 fn main() {
