@@ -337,6 +337,10 @@ fn severity_to_sarif_level(severity: Severity) -> &'static str {
     }
 }
 
+fn explain_details(name: &str) -> &'static str {
+    describe_rule(name)
+}
+
 fn describe_rule(name: &str) -> &'static str {
     match name {
         "missing-require-auth" => "Method writes to storage without env.require_auth()",
