@@ -62,17 +62,15 @@ impl<'ast, 'a> Visit<'ast> for SymbolKeyVisitor<'a> {
         if let Some(last_segment) = m.path.segments.last() {
             if last_segment.ident == "symbol_short" {
                 let tokens = m.tokens.clone();
-                if let Ok(lit) = syn::parse2::<Lit>(tokens) {
-                    if let Lit::Str(s) = lit {
-                        let key = s.value();
-                        let span = m.span().start();
-                        let pos = span.column;
-                        let line = span.line;
-                        self.symbol_keys
-                            .entry(key)
-                            .or_default()
-                            .push((pos, line));
-                    }
+                if let Ok(Lit::Str(s)) = syn::parse2::<Lit>(tokens) {
+                    let key = s.value();
+                    let span = m.span().start();
+                    let pos = span.column;
+                    let line = span.line;
+                    self.symbol_keys
+                        .entry(key)
+                        .or_default()
+                        .push((pos, line));
                 }
             }
         }

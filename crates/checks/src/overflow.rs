@@ -155,9 +155,10 @@ impl Visit<'_> for ArithVisitor<'_> {
                      `checked_mul`, or `saturating_*` to avoid silent overflow.",
                     self.fn_name
                 ),
-                rule_url: Some(format!(
+                rule_url: Some(
                     "https://github.com/SorobanGuard/Guard-CLI/blob/main/docs/checks.md#unchecked-arithmetic"
-                )),
+                        .to_string(),
+                ),
                 suggestion: None,
             });
         }

@@ -8,7 +8,7 @@
 //! (containing `.storage()`) exists alongside an `env.invoke_contract` / `env.try_call`,
 //! the method is flagged. This catches both inlined and variable-mediated patterns.
 
-use crate::util::contractimpl_functions;
+use crate::util::contractimpl_functions_excluding_test;
 use crate::{Check, Finding, Severity};
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
@@ -27,7 +27,7 @@ impl Check for DelegateCallRiskCheck {
 
     fn run(&self, file: &File, _source: &str) -> Vec<Finding> {
         let mut out = Vec::new();
-        for method in contractimpl_functions(file) {
+        for method in contractimpl_functions_excluding_test(file) {
             let fn_name = method.sig.ident.to_string();
             let mut v = DelegateVisitor {
                 has_storage_read: false,

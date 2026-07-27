@@ -1,8 +1,7 @@
 //! Flags `env.invoke_contract(…)` calls whose return value is silently discarded.
 
-use crate::util::contractimpl_functions;
+use crate::util::contractimpl_functions_excluding_test;
 use crate::{Check, Finding, Severity};
-use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 use syn::{Expr, ExprMethodCall, File, Stmt};
 
@@ -17,7 +16,7 @@ impl Check for UncheckedInvokeReturnCheck {
 
     fn run(&self, file: &File, _source: &str) -> Vec<Finding> {
         let mut out = Vec::new();
-        for method in contractimpl_functions(file) {
+        for method in contractimpl_functions_excluding_test(file) {
             let fn_name = method.sig.ident.to_string();
             let mut scan = InvokeReturnScan {
                 fn_name,

@@ -1,6 +1,6 @@
 //! Privileged-style entrypoints without any `require_auth` / `require_auth_for_args` call.
 
-use crate::util::contractimpl_functions;
+use crate::util::contractimpl_functions_excluding_test;
 use crate::{Check, Finding, Severity};
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
@@ -50,6 +50,12 @@ impl UnprotectedAdminCheck {
     }
 }
 
+impl Default for UnprotectedAdminCheck {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Check for UnprotectedAdminCheck {
     fn name(&self) -> &str {
         CHECK_NAME
@@ -57,7 +63,7 @@ impl Check for UnprotectedAdminCheck {
 
     fn run(&self, file: &File, _source: &str) -> Vec<Finding> {
         let mut out = Vec::new();
-        for method in contractimpl_functions(file) {
+        for method in contractimpl_functions_excluding_test(file) {
             if !matches!(method.vis, Visibility::Public(_)) {
                 continue;
             }

@@ -57,6 +57,10 @@ enum Commands {
     },
     /// List the checks that are enabled by default
     ListChecks,
+    /// Explain a specific check in more detail
+    Explain { check_name: String },
+    /// Print shell completion scripts
+    Completions { shell: Shell },
     /// Print version and build information
     Version,
 }
@@ -76,6 +80,7 @@ fn main() {
             fail_on,
             disable_check,
         } => {
+            let no_color = std::env::var_os("NO_COLOR").is_some();
             if no_color {
                 colored::control::set_override(false);
             }
@@ -143,9 +148,12 @@ fn main() {
 
             let includes: Vec<String> = include.into_iter().collect();
             match scan_directory_with_checks(&path, &[], &includes, &active_checks) {
-                Ok((findings, files_scanned, files_skipped)) => {
-                    let any_high = findings
-                Ok((findings, files_scanned)) => {
+                Ok((file_results, files_scanned)) => {
+                    let findings: Vec<Finding> = file_results
+                        .iter()
+                        .flat_map(|result| result.findings.iter().cloned())
+                        .collect();
+                    let any_high = findings.iter().any(|f| f.severity == Severity::High);
                     let should_fail = findings
                         .iter()
                         .any(|f| f.severity <= fail_threshold);
@@ -197,17 +205,8 @@ fn main() {
                         }
                     }
 
-                    if verbose && files_skipped > 0 {
-                        eprintln!(
-                            "Skipped {} generated file(s) from analysis.",
-                            files_skipped
-                        );
-                    }
-
-                    if any_high {
-                    } else if !quiet || should_fail {
-                        let (display, truncated) = truncate(&findings, 0);
-                        print_pretty(display, files_scanned, path.display().to_string(), truncated);
+                    if verbose {
+                        eprintln!("Scanned {} file(s).", files_scanned);
                     }
 
                     if should_fail {
@@ -263,6 +262,7 @@ fn main() {
     }
 }
 
+#[allow(dead_code)]
 fn parse_severity(s: &str) -> Severity {
     match s.to_lowercase().as_str() {
         "high" => Severity::High,
@@ -272,6 +272,7 @@ fn parse_severity(s: &str) -> Severity {
 }
 
 /// Returns (slice to display, count of truncated findings).
+#[allow(dead_code)]
 fn truncate(findings: &[Finding], max: usize) -> (&[Finding], usize) {
     if max == 0 || findings.len() <= max {
         (findings, 0)
@@ -280,6 +281,7 @@ fn truncate(findings: &[Finding], max: usize) -> (&[Finding], usize) {
     }
 }
 
+#[allow(dead_code)]
 fn emit_gha_annotations(findings: &[Finding]) {
     for f in findings {
         let level = match f.severity {
@@ -391,6 +393,29 @@ fn describe_check(name: &str) -> (&'static str, &'static str) {
         "reentrancy-risk" => ("high", "Flags storage writes followed by cross-contract calls"),
         "panic-in-contract" => ("medium", "Flags panic!, unwrap, and expect in contract methods"),
         _ => ("low", "Custom detector"),
+    }
+}
+
+fn explain_details(name: &str) -> &'static str {
+    match name {
+        "missing-require-auth" => "Add env.require_auth() before mutating persistent or instance storage.",
+        "unchecked-arithmetic" => "Prefer checked or saturating arithmetic to avoid overflow.",
+        "unprotected-admin" => "Require authorization on privileged entrypoints.",
+        "unsafe-storage-patterns" => "Avoid temporary storage and dynamic Symbol keys in contract methods.",
+        "missing-ttl-extension" => "Extend TTL after persistent writes that should survive longer.",
+        "forbidden-std-imports" => "Use no_std-friendly imports instead of std in Soroban contracts.",
+        "hardcoded-address" => "Avoid embedding address literals directly into contract logic.",
+        "unsafe-cross-contract-input" => "Validate cross-contract call results before using them.",
+        "missing-contract-annotation" => "Add the #[contract] annotation to the contract struct.",
+        "delegate-call-risk" => "Delegate-style calls can change execution context unexpectedly.",
+        "integer-division-truncation" => "Division can truncate the remainder; check the divisor and use safe patterns.",
+        "missing-event-emission" => "Emit events for state changes so off-chain clients can observe them.",
+        "symbol-key-collision" => "Avoid reusing the same storage Symbol key across different data paths.",
+        "self-transfer" => "Prevent transfers where the sender and receiver are the same account.",
+        "missing-zero-address-check" => "Reject the zero address before performing sensitive operations.",
+        "reentrancy-risk" => "Avoid external calls after state changes unless re-entry is handled safely.",
+        "panic-in-contract" => "Panic and unwrap sequences abort execution and should be avoided in contract code.",
+        _ => "Custom detector.",
     }
 }
 

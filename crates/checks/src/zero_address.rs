@@ -1,6 +1,6 @@
 //! Missing zero-address check: `Address` parameters with no zero/default assertion.
 
-use crate::util::contractimpl_functions;
+use crate::util::contractimpl_functions_excluding_test;
 use crate::{Check, Finding, Severity};
 use syn::visit::{self, Visit};
 use syn::{File, FnArg, Pat, PatType, Type, TypePath};
@@ -101,7 +101,7 @@ impl Check for MissingZeroAddressCheck {
 
     fn run(&self, file: &File, _source: &str) -> Vec<Finding> {
         let mut out = Vec::new();
-        for method in contractimpl_functions(file) {
+        for method in contractimpl_functions_excluding_test(file) {
             let fn_name = method.sig.ident.to_string();
             let is_sensitive = SENSITIVE_NAMES.contains(&fn_name.as_str());
             if !is_sensitive {
