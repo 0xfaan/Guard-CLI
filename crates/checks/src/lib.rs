@@ -229,6 +229,8 @@ pub fn default_checks() -> Vec<Box<dyn Check + Send + Sync>> {
         Box::new(UnprotectedTokenMintCheck),
         Box::new(UnprotectedContractDeploymentCheck),
         Box::new(UncheckedTokenAmountCheck),
+        Box::new(LargeLoopCheck),
+        Box::new(MissingNonceCheck),
     ]
 }
 
@@ -267,6 +269,8 @@ pub fn default_checks_with_config(
         Box::new(UnprotectedTokenMintCheck),
         Box::new(UnprotectedContractDeploymentCheck),
         Box::new(UncheckedTokenAmountCheck),
+        Box::new(LargeLoopCheck),
+        Box::new(MissingNonceCheck),
     ];
     checks.retain(|c| !disabled.contains(&c.name().to_string()));
     checks
