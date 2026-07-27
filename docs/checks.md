@@ -104,6 +104,27 @@ Names like `set_owner` strongly suggest privilege; without any auth call the sca
 
 ---
 
+## `missing-ttl-extension` (Medium)
+
+**Status:** Phase 3
+
+**What it detects**
+
+In `#[contractimpl]` methods: writes to persistent storage through `env.storage().persistent().set(...)` or `.append(...)` without a matching `extend_ttl(...)` or `bump(...)` call on the same storage tier in the same function body.
+
+**Why it matters**
+
+Persistent ledger entries expire. Writing data without extending its TTL risks the entry being evicted, which can cause a later `get` to return `None` for data the contract expects to be present.
+
+**Limitations**
+
+- Only the immediate function body is analyzed.
+- TTL extensions performed in helper functions are not tracked.
+
+**Fixture:** `test-contracts/ttl-vulnerable/`, `test-contracts/ttl-safe/`
+
+---
+
 ## `hardcoded-address` (Medium)
 
 **Status:** Phase 3
@@ -288,7 +309,7 @@ Self-transfers waste ledger space, waste the caller's gas, and may indicate a lo
 - Guard detection is structural (presence of a comparison expression in the body); complex guard logic may not be recognized.
 - Only functions with "transfer" or "send" in the name are inspected.
 
-**Fixture:** `test-contracts/transfer-vulnerable/`, `test-contracts/transfer-safe/`
+**Fixture:** `test-contracts/self-transfer-vulnerable/`, `test-contracts/self-transfer-safe/`
 
 ---
 
