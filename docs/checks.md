@@ -309,7 +309,7 @@ Self-transfers waste ledger space, waste the caller's gas, and may indicate a lo
 - Guard detection is structural (presence of a comparison expression in the body); complex guard logic may not be recognized.
 - Only functions with "transfer" or "send" in the name are inspected.
 
-**Fixture:** `test-contracts/transfer-vulnerable/`, `test-contracts/transfer-safe/`
+**Fixture:** `test-contracts/self-transfer-vulnerable/`, `test-contracts/self-transfer-safe/`
 
 ---
 

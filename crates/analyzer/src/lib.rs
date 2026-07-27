@@ -247,6 +247,14 @@ fn run_checks_for_file(
 
 /// `root` is used to compute relative file labels in findings. `excludes` are glob patterns
 /// matched against each explicit file path relative to `root`.
+/// Recursively scan `.rs` files under `root` and aggregate findings from every check.
+///
+/// `root` may be a directory **or a single `.rs` file**. When a file path is given it is scanned
+/// directly without any directory walk.
+///
+/// `root` is used only to compute relative file labels in findings (same convention as
+/// [`scan_directory`]). `excludes` are glob patterns matched against each file's path
+/// relative to `root`; matching files are skipped.
 pub fn scan_files(
     paths: &[PathBuf],
     root: &Path,
@@ -269,6 +277,7 @@ pub fn scan_files(
         })
         .cloned()
         .collect();
+
     let files_scanned = filtered.len();
 
     let mut findings: Vec<Finding> = filtered

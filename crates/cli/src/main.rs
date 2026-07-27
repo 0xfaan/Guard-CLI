@@ -57,6 +57,9 @@ enum Commands {
         /// Disable a named check (may be repeated)
         #[arg(long, value_name = "CHECK")]
         disable_check: Vec<String>,
+        /// Disable ANSI color output (equivalent to setting NO_COLOR=1)
+        #[arg(long)]
+        no_color: bool,
     },
     /// List the checks that are enabled by default
     ListChecks,
@@ -72,6 +75,16 @@ enum Commands {
     },
     /// Print version and build information
     Version,
+    /// Print full documentation for a named check
+    Explain {
+        /// Name of the check (e.g. `missing-require-auth`)
+        check_name: String,
+    },
+    /// Print shell completion scripts for Bash, Zsh, Fish, or PowerShell
+    Completions {
+        /// Shell to generate completions for
+        shell: Shell,
+    },
 }
 
 fn main() {
@@ -89,6 +102,7 @@ fn main() {
             include,
             fail_on,
             disable_check,
+            no_color,
         } => {
             if no_color {
                 colored::control::set_override(false);
@@ -381,6 +395,13 @@ fn describe_rule(name: &str) -> &'static str {
         "unchecked-divisor" => "Division uses a runtime divisor without a zero guard",
         "reentrancy-risk" => "Storage write followed by cross-contract invocation risks reentrancy",
         "panic-in-contract" => "Contract uses panic!, unwrap, or expect which abort the WASM execution",
+        "mutable-global-state" => "Mutable static declarations at module scope are unsafe in Soroban",
+        "re-initialization-risk" => "Init functions should guard against re-entry",
+        "unchecked-invoke-return" => "Cross-contract calls must have their return values checked",
+        "missing-balance-check" => "Token transfers should verify sufficient balance",
+        "unbounded-vec-growth" => "Vecs in storage must have bounded growth to avoid ledger limits",
+        "unsafe-randomness" => "Timestamp and sequence are predictable, not random",
+        "unchecked-divisor" => "Divisor must be validated to be non-zero",
         _ => "Custom check",
     }
 }
@@ -411,6 +432,13 @@ fn describe_check(name: &str) -> (&'static str, &'static str) {
         "unchecked-divisor" => ("high", "Flags division by runtime values without zero guards"),
         "reentrancy-risk" => ("high", "Flags storage writes followed by cross-contract calls"),
         "panic-in-contract" => ("medium", "Flags panic!, unwrap, and expect in contract methods"),
+        "mutable-global-state" => ("high", "Flags mutable static declarations at module scope"),
+        "re-initialization-risk" => ("high", "Flags init functions without re-entry guards"),
+        "unchecked-invoke-return" => ("medium", "Flags invoke_contract calls with ignored return values"),
+        "missing-balance-check" => ("high", "Flags token transfers without balance validation"),
+        "unbounded-vec-growth" => ("medium", "Flags Vecs that grow without bounds"),
+        "unsafe-randomness" => ("high", "Flags use of timestamp/sequence as randomness"),
+        "unchecked-divisor" => ("high", "Flags division operations with unchecked divisors"),
         _ => ("low", "Custom detector"),
     }
 }
