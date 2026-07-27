@@ -27,6 +27,7 @@ pub mod unsafe_randomness;
 pub mod vec_growth;
 pub mod xc_input;
 pub mod zero_address;
+pub mod unchecked_token_amount;
 pub mod uninitialized_storage_read;
 pub mod unprotected_contract_deployment;
 pub mod unprotected_token_mint;
@@ -60,6 +61,7 @@ pub use unsafe_randomness::UnsafeRandomnessCheck;
 pub use vec_growth::UnboundedVecGrowthCheck;
 pub use xc_input::UnsafeCrossContractInputCheck;
 pub use zero_address::MissingZeroAddressCheck;
+pub use unchecked_token_amount::UncheckedTokenAmountCheck;
 pub use uninitialized_storage_read::UninitializedStorageReadCheck;
 pub use unprotected_contract_deployment::UnprotectedContractDeploymentCheck;
 pub use unprotected_token_mint::UnprotectedTokenMintCheck;
@@ -221,6 +223,7 @@ pub fn default_checks() -> Vec<Box<dyn Check + Send + Sync>> {
         Box::new(UnprotectedUpgradeCheck),
         Box::new(UnprotectedTokenMintCheck),
         Box::new(UnprotectedContractDeploymentCheck),
+        Box::new(UncheckedTokenAmountCheck),
     ]
 }
 
@@ -257,6 +260,7 @@ pub fn default_checks_with_config(
         Box::new(UnprotectedUpgradeCheck),
         Box::new(UnprotectedTokenMintCheck),
         Box::new(UnprotectedContractDeploymentCheck),
+        Box::new(UncheckedTokenAmountCheck),
     ];
     checks.retain(|c| !disabled.contains(&c.name().to_string()));
     checks
