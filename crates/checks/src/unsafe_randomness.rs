@@ -39,7 +39,7 @@ impl<'ast> Visit<'ast> for RandomnessVisitor {
                         method_name
                     ),
                     rule_url: None,
-                    fix_hint: Some(
+                    suggestion: Some(
                         "Use oracle services or cryptographic randomness instead".to_string(),
                     ),
                 });

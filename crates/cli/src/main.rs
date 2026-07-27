@@ -5,10 +5,10 @@ use clap_complete::{generate, Shell};
 use colored::Colorize;
 use soroban_guard_analyzer::scan_directory_with_checks;
 use soroban_guard_checks::{default_checks, default_checks_with_config, Finding, Severity};
+use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::collections::HashSet;
 
 #[derive(Parser)]
 #[command(name = "soroban-guard")]
@@ -42,6 +42,9 @@ enum Commands {
         /// Suppress all output when there are zero High findings
         #[arg(long)]
         quiet: bool,
+        /// Disable colored output
+        #[arg(long)]
+        no_color: bool,
         /// Print additional scan statistics such as skipped generated files
         #[arg(long)]
         verbose: bool,
@@ -63,8 +66,28 @@ enum Commands {
     },
     /// List the checks that are enabled by default
     ListChecks,
+    /// Explain a check by name
+    Explain {
+        /// Check name to explain
+        check_name: String,
+    },
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        shell: Shell,
+    },
     /// Print version and build information
     Version,
+    /// Print full documentation for a named check
+    Explain {
+        /// Name of the check (e.g. `missing-require-auth`)
+        check_name: String,
+    },
+    /// Print shell completion scripts for Bash, Zsh, Fish, or PowerShell
+    Completions {
+        /// Shell to generate completions for
+        shell: Shell,
+    },
 }
 
 fn main() {
@@ -77,6 +100,7 @@ fn main() {
             markdown,
             output,
             quiet,
+            no_color,
             verbose,
             include,
             exclude,
@@ -157,6 +181,12 @@ fn main() {
                     let any_high = findings
                         .iter()
                         .any(|f| matches!(f.severity, Severity::High));
+            match scan_directory_with_checks(&path, &[], &includes, &active_checks) {
+                Ok((results, files_scanned)) => {
+                    let findings: Vec<_> = results
+                        .iter()
+                        .flat_map(|r| r.findings.iter().cloned())
+                        .collect();
                     let should_fail = findings
                         .iter()
                         .any(|f| f.severity <= fail_threshold);
@@ -198,12 +228,13 @@ fn main() {
                             print_markdown(&findings);
                         }
                     } else {
-                        if !quiet || any_high {
+                        if !quiet || should_fail {
+                            let (display, truncated) = truncate(&findings, 0);
                             print_pretty(
-                                &findings,
+                                display,
                                 files_scanned,
                                 path.display().to_string(),
-                                0,
+                                truncated,
                             );
                         }
                     }
@@ -344,6 +375,10 @@ fn severity_to_sarif_level(severity: Severity) -> &'static str {
     }
 }
 
+fn explain_details(name: &str) -> &'static str {
+    describe_rule(name)
+}
+
 fn describe_rule(name: &str) -> &'static str {
     match name {
         "missing-require-auth" => "Method writes to storage without env.require_auth()",
@@ -361,8 +396,22 @@ fn describe_rule(name: &str) -> &'static str {
         "symbol-key-collision" => "Multiple storage keys share the same Symbol value",
         "self-transfer" => "Token transfer destination may equal the sender",
         "missing-zero-address-check" => "Address argument not validated against the zero address",
+        "mutable-global-state" => "Mutable global state is unsafe and not persisted on-chain",
+        "re-initialization-risk" => "Initializer-like function can overwrite critical state",
+        "unchecked-invoke-return" => "Cross-contract invocation result is discarded",
+        "missing-balance-check" => "Token transfer occurs without a balance or authorization check",
+        "unbounded-vec-growth" => "Storage-backed Vec can grow without a bound",
+        "unsafe-randomness" => "Ledger data is used as a randomness source",
+        "unchecked-divisor" => "Division uses a runtime divisor without a zero guard",
         "reentrancy-risk" => "Storage write followed by cross-contract invocation risks reentrancy",
         "panic-in-contract" => "Contract uses panic!, unwrap, or expect which abort the WASM execution",
+        "mutable-global-state" => "Mutable static declarations at module scope are unsafe in Soroban",
+        "re-initialization-risk" => "Init functions should guard against re-entry",
+        "unchecked-invoke-return" => "Cross-contract calls must have their return values checked",
+        "missing-balance-check" => "Token transfers should verify sufficient balance",
+        "unbounded-vec-growth" => "Vecs in storage must have bounded growth to avoid ledger limits",
+        "unsafe-randomness" => "Timestamp and sequence are predictable, not random",
+        "unchecked-divisor" => "Divisor must be validated to be non-zero",
         _ => "Custom check",
     }
 }
@@ -384,9 +433,95 @@ fn describe_check(name: &str) -> (&'static str, &'static str) {
         "symbol-key-collision" => ("medium", "Flags storage keys that share the same Symbol value"),
         "self-transfer" => ("medium", "Flags token transfers where sender may equal receiver"),
         "missing-zero-address-check" => ("medium", "Flags Address parameters not checked for the zero address"),
+        "mutable-global-state" => ("high", "Flags mutable global state in contract code"),
+        "re-initialization-risk" => ("high", "Flags initializer-like functions without re-init guards"),
+        "unchecked-invoke-return" => ("medium", "Flags discarded cross-contract call return values"),
+        "missing-balance-check" => ("high", "Flags token transfers without balance or authorization checks"),
+        "unbounded-vec-growth" => ("medium", "Flags storage-backed Vec growth without a length cap"),
+        "unsafe-randomness" => ("high", "Flags ledger timestamp or sequence as randomness"),
+        "unchecked-divisor" => ("high", "Flags division by runtime values without zero guards"),
         "reentrancy-risk" => ("high", "Flags storage writes followed by cross-contract calls"),
         "panic-in-contract" => ("medium", "Flags panic!, unwrap, and expect in contract methods"),
+        "mutable-global-state" => ("high", "Flags mutable static declarations at module scope"),
+        "re-initialization-risk" => ("high", "Flags init functions without re-entry guards"),
+        "unchecked-invoke-return" => ("medium", "Flags invoke_contract calls with ignored return values"),
+        "missing-balance-check" => ("high", "Flags token transfers without balance validation"),
+        "unbounded-vec-growth" => ("medium", "Flags Vecs that grow without bounds"),
+        "unsafe-randomness" => ("high", "Flags use of timestamp/sequence as randomness"),
+        "unchecked-divisor" => ("high", "Flags division operations with unchecked divisors"),
         _ => ("low", "Custom detector"),
+    }
+}
+
+fn explain_details(name: &str) -> &'static str {
+    match name {
+        "missing-require-auth" => {
+            "Reports contract methods that mutate storage without calling require_auth or require_auth_for_args."
+        }
+        "unchecked-arithmetic" => {
+            "Reports wrapping +, -, *, and compound arithmetic in contract methods; prefer checked_* or saturating_* APIs."
+        }
+        "unprotected-admin" => {
+            "Reports public admin-like entrypoints such as set_owner, pause, migrate, or upgrade when they lack an auth gate."
+        }
+        "unsafe-storage-patterns" => {
+            "Reports temporary storage mutations and dynamic Symbol keys that may expire unexpectedly or collide."
+        }
+        "missing-ttl-extension" => {
+            "Reports persistent storage writes that do not extend TTL in the same function."
+        }
+        "forbidden-std-imports" => {
+            "Reports std imports in Soroban contract files because deployable contracts must compile for no_std WASM."
+        }
+        "hardcoded-address" => {
+            "Reports Stellar public-key-shaped string literals embedded directly in source."
+        }
+        "unsafe-cross-contract-input" => {
+            "Reports invoke_contract return values stored directly without local validation."
+        }
+        "missing-contract-annotation" => {
+            "Reports contractimpl blocks without a sibling struct annotated with #[contract]."
+        }
+        "delegate-call-risk" => {
+            "Reports storage-derived cross-contract callees that can redirect execution if storage is poisoned."
+        }
+        "integer-division-truncation" => {
+            "Reports integer division where truncation may silently change financial or accounting results."
+        }
+        "missing-event-emission" => {
+            "Reports state-mutating functions that do not publish events for off-chain indexers."
+        }
+        "symbol-key-collision" => {
+            "Reports duplicate symbol_short! keys in the same impl block."
+        }
+        "self-transfer" => {
+            "Reports transfer-like functions that do not guard against sender and recipient being equal."
+        }
+        "missing-zero-address-check" => {
+            "Reports Address parameters stored or used without checking for default or zero-address values."
+        }
+        "mutable-global-state" => {
+            "Reports static mut items, which are unsafe and not valid persistent contract state."
+        }
+        "re-initialization-risk" => {
+            "Reports initializer-like methods that write state without checking whether initialization already happened."
+        }
+        "unchecked-invoke-return" => {
+            "Reports bare invoke_contract statements whose return values are discarded."
+        }
+        "missing-balance-check" => {
+            "Reports token transfer calls that lack a preceding balance or authorization check."
+        }
+        "unbounded-vec-growth" => {
+            "Reports storage-backed Vec values pushed and written back without an apparent length cap."
+        }
+        "unsafe-randomness" => {
+            "Reports ledger timestamp or sequence usage as a randomness source."
+        }
+        "unchecked-divisor" => {
+            "Reports division by runtime values without an apparent non-zero guard."
+        }
+        _ => "No detailed explanation is available for this custom check.",
     }
 }
 

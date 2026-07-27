@@ -129,10 +129,7 @@ Guard-CLI/
 │   └── checks/                 # Check trait + individual detectors
 │       └── src/
 │           ├── lib.rs          # trait definition, Finding, Severity, default_checks()
-│           ├── auth.rs         # missing-require-auth
-│           ├── overflow.rs     # unchecked-arithmetic
-│           ├── admin.rs        # unprotected-admin
-│           └── storage.rs      # unsafe-storage-patterns
+│           └── ...             # one module per detector; see docs/checks.md for the full list
 └── test-contracts/             # standalone Soroban crates (excluded from workspace)
     ├── vulnerable/             # triggers missing-require-auth
     ├── safe/                   # passes missing-require-auth
@@ -215,10 +212,7 @@ impl Check for MyCustomCheck {
 // crates/checks/src/lib.rs — register it here
 pub fn default_checks() -> Vec<Box<dyn Check + Send + Sync>> {
     vec![
-        Box::new(MissingRequireAuthCheck),
-        Box::new(UncheckedArithmeticCheck),
-        Box::new(UnprotectedAdminCheck),
-        Box::new(UnsafeStoragePatternsCheck),
+        // ...(existing checks)...
         Box::new(MyCustomCheck),   // 👈 add your check
     ]
 }

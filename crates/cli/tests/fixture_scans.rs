@@ -78,6 +78,21 @@ fn reentrancy_fixtures() {
 }
 
 #[test]
+fn self_transfer_fixtures() {
+    assert_fixture_pair("self-transfer", "self-transfer");
+}
+
+#[test]
+fn std_imports_fixtures() {
+    assert_fixture_pair("std-imports", "forbidden-std-imports");
+}
+
+#[test]
+fn key_collision_fixtures() {
+    assert_fixture_pair("key-collision", "symbol-key-collision");
+}
+
+#[test]
 fn storage_fixtures() {
     assert_fixture_pair("storage", "unsafe-storage-patterns");
 }
