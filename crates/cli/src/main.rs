@@ -143,9 +143,11 @@ fn main() {
 
             let includes: Vec<String> = include.into_iter().collect();
             match scan_directory_with_checks(&path, &[], &includes, &active_checks) {
-                Ok((findings, files_scanned, files_skipped)) => {
-                    let any_high = findings
-                Ok((findings, files_scanned)) => {
+                Ok((results, files_scanned)) => {
+                    let findings: Vec<_> = results
+                        .iter()
+                        .flat_map(|r| r.findings.iter().cloned())
+                        .collect();
                     let should_fail = findings
                         .iter()
                         .any(|f| f.severity <= fail_threshold);
@@ -187,7 +189,7 @@ fn main() {
                             print_markdown(&findings);
                         }
                     } else {
-                        if !quiet || any_high {
+                        if !quiet || should_fail {
                             print_pretty(
                                 &findings,
                                 files_scanned,
@@ -195,19 +197,6 @@ fn main() {
                                 0,
                             );
                         }
-                    }
-
-                    if verbose && files_skipped > 0 {
-                        eprintln!(
-                            "Skipped {} generated file(s) from analysis.",
-                            files_skipped
-                        );
-                    }
-
-                    if any_high {
-                    } else if !quiet || should_fail {
-                        let (display, truncated) = truncate(&findings, 0);
-                        print_pretty(display, files_scanned, path.display().to_string(), truncated);
                     }
 
                     if should_fail {
