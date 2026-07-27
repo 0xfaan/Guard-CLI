@@ -483,6 +483,5 @@ Panics abort the transaction with an unhelpful, generic error and can leave the 
 
 - Does not track `unwrap`/`expect` through re-exports or type aliases — only the literal method name is matched.
 - Flags every occurrence regardless of whether the `Option`/`Result` being unwrapped is realistically `None`/`Err` (e.g. immediately after a guarded check).
-- This check is implemented and unit-tested but not yet included in `default_checks()` — it does not currently run as part of a default `soroban-guard` scan.
 
 **Fixture:** `test-contracts/panic-vulnerable/`, `test-contracts/panic-safe/`

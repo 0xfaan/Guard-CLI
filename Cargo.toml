@@ -8,9 +8,6 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/SorobanGuard/Guard-CLI"
-readme = "README.md"
-keywords = ["soroban", "stellar", "security", "static-analysis", "wasm"]
-categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
 syn = { version = "2.0", features = ["full", "visit"] }

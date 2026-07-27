@@ -51,6 +51,9 @@ enum Commands {
         /// Only scan files matching this glob pattern (e.g. `src/token*.rs`)
         #[arg(long)]
         include: Option<String>,
+        /// Exclude files matching this glob pattern (e.g. `src/proxy.rs`); may be repeated
+        #[arg(long, value_name = "PATTERN")]
+        exclude: Vec<String>,
         /// Exit code 1 when findings at or above this severity are found (high|medium|low, default: high)
         #[arg(long, default_value = "high")]
         fail_on: String,
@@ -100,6 +103,7 @@ fn main() {
             no_color,
             verbose,
             include,
+            exclude,
             fail_on,
             disable_check,
             no_color,
@@ -170,6 +174,13 @@ fn main() {
             let active_checks = default_checks_with_config(&all_disabled, extra_sensitive);
 
             let includes: Vec<String> = include.into_iter().collect();
+            match scan_directory_with_checks(&path, &exclude, &includes, &active_checks) {
+                Ok((results, files_scanned, files_skipped)) => {
+                    let findings: Vec<Finding> =
+                        results.into_iter().flat_map(|r| r.findings).collect();
+                    let any_high = findings
+                        .iter()
+                        .any(|f| matches!(f.severity, Severity::High));
             match scan_directory_with_checks(&path, &[], &includes, &active_checks) {
                 Ok((results, files_scanned)) => {
                     let findings: Vec<_> = results
@@ -293,15 +304,6 @@ fn parse_severity(s: &str) -> Severity {
         "high" => Severity::High,
         "medium" => Severity::Medium,
         _ => Severity::Low,
-    }
-}
-
-/// Returns (slice to display, count of truncated findings).
-fn truncate(findings: &[Finding], max: usize) -> (&[Finding], usize) {
-    if max == 0 || findings.len() <= max {
-        (findings, 0)
-    } else {
-        (&findings[..max], findings.len() - max)
     }
 }
 
