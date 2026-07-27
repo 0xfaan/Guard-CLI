@@ -485,3 +485,47 @@ Panics abort the transaction with an unhelpful, generic error and can leave the 
 - Flags every occurrence regardless of whether the `Option`/`Result` being unwrapped is realistically `None`/`Err` (e.g. immediately after a guarded check).
 
 **Fixture:** `test-contracts/panic-vulnerable/`, `test-contracts/panic-safe/`
+
+---
+
+## `large-loop` (Medium)
+
+**What it detects**
+
+Inside `#[contractimpl]` public methods: `loop { … }` and `while <cond> { … }` constructs that have no obvious bound — i.e. any `loop` or `while` expression found in the method body.
+
+**Why it matters**
+
+Soroban contracts run under a fixed compute-budget cap. An unbounded loop can exhaust the budget in a single invocation, causing the transaction to abort. In adversarial scenarios a caller can craft inputs that trigger worst-case iteration counts, turning the contract into a denial-of-service vector against itself.
+
+**Limitations**
+
+- Does not distinguish loops with a provably finite iteration count (e.g. `while i < 10`) from genuinely unbounded ones — all `loop`/`while` constructs are flagged.
+- `for` loops over iterators are not flagged; callers should still audit iterator sources for large collections.
+- Loops inside private helper functions called from a `#[contractimpl]` method are not detected.
+
+**Fixture:** `test-contracts/large-loop-vulnerable/`, `test-contracts/large-loop-safe/`
+
+---
+
+## `missing-nonce` (Medium)
+
+**What it detects**
+
+Public methods in `#[contractimpl]` that:
+
+1. Accept at least one `Address` parameter, and
+2. Perform a storage write (`set`, `remove`, `append`, `push`, or `push_back`), and
+3. Contain no reference to a nonce or replay-protection identifier — specifically, no identifier matching `nonce`, `sequence`, `seq_num`, or `replay` in the function body.
+
+**Why it matters**
+
+Off-chain-signed meta-transactions (e.g. permit-style flows, delegated actions) must include a nonce or sequence number to prevent replay attacks. Without one, an observer can re-submit a valid signed payload to repeat the state-mutating operation indefinitely on behalf of the signer.
+
+**Limitations**
+
+- Detection is purely identifier-based; a nonce stored under a differently-named variable (e.g. `counter`, `ts`) will not clear the finding.
+- Does not verify that the nonce value is actually checked or incremented — only that a recognised keyword appears in the function body.
+- Validation done inside a helper function called from the flagged method is not visible to this check.
+
+**Fixture:** `test-contracts/nonce-vulnerable/`, `test-contracts/nonce-safe/`
