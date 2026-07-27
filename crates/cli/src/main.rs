@@ -171,7 +171,11 @@ fn main() {
 
             let includes: Vec<String> = include.into_iter().collect();
             match scan_directory_with_checks(&path, &[], &includes, &active_checks) {
-                Ok((findings, files_scanned, files_skipped)) => {
+                Ok((results, files_scanned)) => {
+                    let findings: Vec<_> = results
+                        .iter()
+                        .flat_map(|r| r.findings.iter().cloned())
+                        .collect();
                     let should_fail = findings
                         .iter()
                         .any(|f| f.severity <= fail_threshold);
@@ -367,6 +371,10 @@ fn severity_to_sarif_level(severity: Severity) -> &'static str {
         Severity::Medium => "warning",
         Severity::Low => "note",
     }
+}
+
+fn explain_details(name: &str) -> &'static str {
+    describe_rule(name)
 }
 
 fn describe_rule(name: &str) -> &'static str {
