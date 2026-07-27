@@ -54,6 +54,9 @@ enum Commands {
         /// Disable a named check (may be repeated)
         #[arg(long, value_name = "CHECK")]
         disable_check: Vec<String>,
+        /// Disable ANSI color output (equivalent to setting NO_COLOR=1)
+        #[arg(long)]
+        no_color: bool,
     },
     /// List the checks that are enabled by default
     ListChecks,
@@ -85,6 +88,7 @@ fn main() {
             include,
             fail_on,
             disable_check,
+            no_color,
         } => {
             if no_color {
                 colored::control::set_override(false);
