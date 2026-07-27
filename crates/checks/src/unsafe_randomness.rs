@@ -1,4 +1,5 @@
 use crate::{Check, Finding, Severity};
+use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 use syn::{ExprMethodCall, File};
 

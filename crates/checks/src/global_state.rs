@@ -2,7 +2,6 @@
 
 use crate::{Check, Finding, Severity};
 use syn::{File, Item, ItemStatic};
-use syn::spanned::Spanned;
 
 const CHECK_NAME: &str = "mutable-global-state";
 

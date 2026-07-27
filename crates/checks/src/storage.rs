@@ -1,6 +1,6 @@
 //! Risky Soroban storage usage: temporary persistence and caller-derived `Symbol` keys.
 
-use crate::util::contractimpl_functions;
+use crate::util::contractimpl_functions_excluding_test;
 use crate::{Check, Finding, Severity};
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
@@ -19,7 +19,7 @@ impl Check for UnsafeStoragePatternsCheck {
 
     fn run(&self, file: &File, _source: &str) -> Vec<Finding> {
         let mut out = Vec::new();
-        for method in contractimpl_functions(file) {
+        for method in contractimpl_functions_excluding_test(file) {
             let fn_name = method.sig.ident.to_string();
             let mut v = StorageVisitor {
                 fn_name: fn_name.clone(),

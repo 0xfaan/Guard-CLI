@@ -108,6 +108,10 @@ fn main() {
             disable_check,
             no_color,
         } => {
+            let no_color = std::env::var_os("NO_COLOR").is_some();
+            if no_color {
+                colored::control::set_override(false);
+            }
             // Mutual exclusion
             let format_count = [json, sarif, markdown].iter().filter(|&&b| b).count();
             if format_count > 1 {
@@ -235,6 +239,8 @@ fn main() {
                         }
                     }
 
+                    if verbose {
+                        eprintln!("Scanned {} file(s).", files_scanned);
                     if verbose && files_skipped > 0 {
                         eprintln!(
                             "Skipped {} generated file(s) from analysis.",
@@ -295,6 +301,7 @@ fn main() {
     }
 }
 
+#[allow(dead_code)]
 fn parse_severity(s: &str) -> Severity {
     match s.to_lowercase().as_str() {
         "high" => Severity::High,
@@ -303,6 +310,17 @@ fn parse_severity(s: &str) -> Severity {
     }
 }
 
+/// Returns (slice to display, count of truncated findings).
+#[allow(dead_code)]
+fn truncate(findings: &[Finding], max: usize) -> (&[Finding], usize) {
+    if max == 0 || findings.len() <= max {
+        (findings, 0)
+    } else {
+        (&findings[..max], findings.len() - max)
+    }
+}
+
+#[allow(dead_code)]
 fn emit_gha_annotations(findings: &[Finding]) {
     for f in findings {
         let level = match f.severity {

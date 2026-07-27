@@ -1,6 +1,6 @@
 //! Missing `env.require_auth()` before storage writes in `#[contractimpl]` methods.
 
-use crate::util::contractimpl_functions;
+use crate::util::contractimpl_functions_excluding_test;
 use crate::{Check, Finding, Severity};
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
@@ -19,7 +19,7 @@ impl Check for MissingRequireAuthCheck {
 
     fn run(&self, file: &File, _source: &str) -> Vec<Finding> {
         let mut out = Vec::new();
-        for method in contractimpl_functions(file) {
+        for method in contractimpl_functions_excluding_test(file) {
             let env_param = env_param_name(&method.sig);
             let mut scan = FuncBodyScan::new(env_param.as_deref());
             scan.visit_block(&method.block);

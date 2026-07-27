@@ -16,24 +16,6 @@ fn path_is_contractimpl(path: &syn::Path) -> bool {
 }
 
 /// Every function item inside a `#[contractimpl]` impl in the file.
-pub fn contractimpl_functions(file: &syn::File) -> Vec<&syn::ImplItemFn> {
-    let mut out = Vec::new();
-    for item in &file.items {
-        let Item::Impl(item_impl) = item else {
-            continue;
-        };
-        if !is_contractimpl(item_impl) {
-            continue;
-        }
-        for impl_item in &item_impl.items {
-            if let ImplItem::Fn(m) = impl_item {
-                out.push(m);
-            }
-        }
-    }
-    out
-}
-
 fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
         if !attr.path().is_ident("cfg") {
@@ -51,6 +33,43 @@ pub fn contractimpl_functions_excluding_test(file: &syn::File) -> Vec<&syn::Impl
     let mut out = Vec::new();
     collect_contractimpl_fns(&file.items, false, &mut out);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_file;
+
+    #[test]
+    fn excludes_contractimpl_functions_inside_test_modules() -> Result<(), syn::Error> {
+        let file = parse_file(
+            r#"
+#[contractimpl]
+impl C {
+    pub fn live(env: Env) {
+        let _ = env;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use soroban_sdk::{contractimpl, Env};
+
+    #[contractimpl]
+    impl C {
+        pub fn test_only(env: Env) {
+            let _ = env;
+        }
+    }
+}
+"#,
+        )?;
+
+        let methods = contractimpl_functions_excluding_test(&file);
+        assert_eq!(methods.len(), 1);
+        assert_eq!(methods[0].sig.ident.to_string(), "live");
+        Ok(())
+    }
 }
 
 fn collect_contractimpl_fns<'a>(

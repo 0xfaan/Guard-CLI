@@ -472,6 +472,79 @@ pub struct FileScanResult {
     pub findings: Vec<Finding>,
 }
 
+/// Scan a specific set of Rust files and aggregate findings from every check.
+pub fn scan_files(
+    paths: &[PathBuf],
+    root: &Path,
+    excludes: &[String],
+) -> Result<(Vec<Finding>, usize), ScanError> {
+    let root = root.canonicalize()?;
+    let exclude_patterns: Vec<glob::Pattern> = excludes
+        .iter()
+        .filter_map(|p| glob::Pattern::new(p).ok())
+        .collect();
+
+    let filtered: Vec<PathBuf> = paths
+        .iter()
+        .filter(|path| {
+            let label = path.strip_prefix(&root).unwrap_or(path);
+            !exclude_patterns
+                .iter()
+                .any(|pat| pat.matches_path(label) || pat.matches_path(path))
+        })
+        .cloned()
+        .collect();
+
+    let checks = default_checks();
+    let findings: Vec<Finding> = filtered
+        .par_iter()
+        .map(|path| {
+            let content = std::fs::read_to_string(path)?;
+            let syn_file = syn::parse_file(&content).map_err(|e| ScanError::Parse {
+                path: path.clone(),
+                message: e.to_string(),
+            })?;
+
+            let file_label = path
+                .strip_prefix(&root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .to_string();
+
+            let mut file_findings: Vec<Finding> = checks
+                .iter()
+                .flat_map(|check| {
+                    let check_name = check.name().to_string();
+                    match catch_unwind(AssertUnwindSafe(|| check.run(&syn_file, &content))) {
+                        Ok(mut hits) => {
+                            for f in &mut hits {
+                                f.file_path.clone_from(&file_label);
+                            }
+                            hits
+                        }
+                        Err(payload) => {
+                            let message = if let Some(msg) = payload.downcast_ref::<&str>() {
+                                msg.to_string()
+                            } else if let Some(msg) = payload.downcast_ref::<String>() {
+                                msg.clone()
+                            } else {
+                                "panic payload was not a string".to_string()
+                            };
+                            eprintln!("warning: {}", ScanError::CheckPanic {
+                                check: check_name,
+                                path: path.clone(),
+                                message,
+                            });
+                            Vec::new()
+                        }
+                    }
+                })
+                .collect();
+
+            dedup_findings(&mut file_findings);
+            file_findings.sort_by_key(|a| a.line);
+            Ok(file_findings)
+        })
 /// Remove duplicate findings with the same `(file_path, line, check_name)`, keeping the first.
 fn dedup_findings(findings: &mut Vec<Finding>) {
     let mut seen = std::collections::HashSet::new();

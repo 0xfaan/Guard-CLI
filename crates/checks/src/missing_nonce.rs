@@ -1,6 +1,6 @@
 use crate::{Check, Finding, Severity};
 use syn::visit::{self, Visit};
-use syn::{ImplItem, ItemImpl, FnArg, Pat};
+use syn::{FnArg, ImplItem, ItemImpl};
 
 const CHECK_NAME: &str = "missing-nonce";
 const NONCE_KEYWORDS: &[&str] = &["nonce", "sequence", "seq_num", "replay"];
@@ -29,7 +29,7 @@ impl<'ast> Visit<'ast> for NonceVisitor {
         if has_contractimpl_attr(&node.attrs) {
             for item in &node.items {
                 if let ImplItem::Fn(method) = item {
-                    if method.sig.vis.is_pub() {
+                    if matches!(method.vis, syn::Visibility::Public(_)) {
                         let has_storage_write = contains_storage_write(&method.block);
                         let has_address_param = contains_address_param(&method.sig.inputs);
                         let has_nonce = contains_nonce_reference(&method.block);
@@ -40,7 +40,7 @@ impl<'ast> Visit<'ast> for NonceVisitor {
                                 check_name: CHECK_NAME.to_string(),
                                 severity: Severity::Medium,
                                 file_path: String::new(),
-                                line: method.span().start().line,
+                                line: method.sig.ident.span().start().line,
                                 function_name: name.clone(),
                                 description:
                                     "State-mutating method with Address parameter lacks nonce/replay protection"
@@ -99,8 +99,7 @@ impl<'ast> Visit<'ast> for StorageWriteVisitor {
 fn contains_address_param(inputs: &syn::punctuated::Punctuated<FnArg, syn::token::Comma>) -> bool {
     inputs.iter().any(|arg| {
         if let FnArg::Typed(pat_type) = arg {
-            let ty_str = format!("{:?}", pat_type.ty);
-            ty_str.contains("Address")
+            matches!(&*pat_type.ty, syn::Type::Path(type_path) if type_path.path.is_ident("Address"))
         } else {
             false
         }
@@ -108,10 +107,23 @@ fn contains_address_param(inputs: &syn::punctuated::Punctuated<FnArg, syn::token
 }
 
 fn contains_nonce_reference(block: &syn::Block) -> bool {
-    let block_text = format!("{:?}", block);
-    NONCE_KEYWORDS
-        .iter()
-        .any(|&keyword| block_text.to_lowercase().contains(keyword))
+    let mut visitor = NonceKeywordVisitor::default();
+    visit::visit_block(&mut visitor, block);
+    visitor.found
+}
+
+#[derive(Default)]
+struct NonceKeywordVisitor {
+    found: bool,
+}
+
+impl<'ast> Visit<'ast> for NonceKeywordVisitor {
+    fn visit_ident(&mut self, node: &'ast syn::Ident) {
+        if NONCE_KEYWORDS.iter().any(|keyword| node == keyword) {
+            self.found = true;
+        }
+        visit::visit_ident(self, node);
+    }
 }
 
 #[cfg(test)]
