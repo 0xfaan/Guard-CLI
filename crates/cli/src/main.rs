@@ -3,12 +3,14 @@ mod config;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use colored::Colorize;
+use notify::{Event, EventKind, RecursiveMode, Watcher};
 use soroban_guard_analyzer::scan_directory_with_checks;
 use soroban_guard_checks::{default_checks, default_checks_with_config, Finding, Severity};
 use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 
 #[derive(Parser)]
 #[command(name = "soroban-guard")]
@@ -60,6 +62,9 @@ enum Commands {
         /// Disable a named check (may be repeated)
         #[arg(long, value_name = "CHECK")]
         disable_check: Vec<String>,
+        /// Watch for .rs file changes and re-run the scan automatically
+        #[arg(long, short = 'w')]
+        watch: bool,
     },
     /// List the checks that are enabled by default
     ListChecks,
@@ -75,6 +80,155 @@ enum Commands {
     },
     /// Print version and build information
     Version,
+}
+
+/// Parameters passed to the core scan-and-print routine.
+struct ScanOptions {
+    path: PathBuf,
+    json: bool,
+    sarif: bool,
+    markdown: bool,
+    output: Option<PathBuf>,
+    quiet: bool,
+    verbose: bool,
+    fail_threshold: Severity,
+    exclude: Vec<String>,
+    includes: Vec<String>,
+}
+
+/// Run a single scan and print its results.
+/// Returns the exit code that would normally be passed to `std::process::exit`
+/// (0 = pass, 1 = findings above threshold, 2 = I/O error).
+fn run_scan(
+    opts: &ScanOptions,
+    active_checks: &[Box<dyn soroban_guard_checks::Check + Send + Sync>],
+) -> i32 {
+    match scan_directory_with_checks(&opts.path, &opts.exclude, &opts.includes, active_checks) {
+        Ok((results, files_scanned, files_skipped)) => {
+            let findings: Vec<Finding> =
+                results.into_iter().flat_map(|r| r.findings).collect();
+            let should_fail = findings
+                .iter()
+                .any(|f| f.severity <= opts.fail_threshold);
+
+            if opts.json {
+                if !opts.quiet || should_fail {
+                    match json_payload(&findings, files_scanned) {
+                        Ok(payload) => {
+                            if let Some(ref out_path) = opts.output {
+                                if let Err(e) = write_output(out_path, &payload) {
+                                    eprintln!("{} {}", "error:".red().bold(), e);
+                                    return 2;
+                                }
+                            } else {
+                                println!("{payload}");
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("{} {}", "error:".red().bold(), e);
+                            return 2;
+                        }
+                    }
+                }
+            } else if opts.sarif {
+                if !opts.quiet || should_fail {
+                    let payload =
+                        serde_json::to_string_pretty(&build_sarif(&findings)).unwrap();
+                    if let Some(ref out_path) = opts.output {
+                        if let Err(e) = write_output(out_path, &payload) {
+                            eprintln!("{} {}", "error:".red().bold(), e);
+                            return 2;
+                        }
+                    } else {
+                        println!("{payload}");
+                    }
+                }
+            } else if opts.markdown {
+                if !opts.quiet || should_fail {
+                    print_markdown(&findings);
+                }
+            } else if !opts.quiet || should_fail {
+                let (display, truncated) = truncate(&findings, 0);
+                print_pretty(
+                    display,
+                    files_scanned,
+                    opts.path.display().to_string(),
+                    truncated,
+                );
+            }
+
+            if opts.verbose {
+                eprintln!("Scanned {} file(s).", files_scanned);
+                if files_skipped > 0 {
+                    eprintln!(
+                        "Skipped {} generated file(s) from analysis.",
+                        files_skipped
+                    );
+                }
+            }
+
+            if should_fail { 1 } else { 0 }
+        }
+        Err(e) => {
+            if opts.json {
+                let envelope = serde_json::json!({ "error": e.to_string() });
+                println!("{}", serde_json::to_string_pretty(&envelope).unwrap());
+            } else {
+                eprintln!("{} {}", "error:".red().bold(), e);
+            }
+            2
+        }
+    }
+}
+
+/// Returns a UTC timestamp string like "2026-07-28 23:09:36" without any
+/// external date crate.
+fn chrono_timestamp() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let s = secs % 60;
+    let m = (secs / 60) % 60;
+    let h = (secs / 3600) % 24;
+    let days = secs / 86400;
+    let (year, month, day) = days_to_ymd(days);
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        year, month, day, h, m, s
+    )
+}
+
+/// Convert days since Unix epoch (1970-01-01) to (year, month, day).
+fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
+    let mut year = 1970u64;
+    loop {
+        let days_in_year = if is_leap(year) { 366 } else { 365 };
+        if days < days_in_year {
+            break;
+        }
+        days -= days_in_year;
+        year += 1;
+    }
+    let months: [u64; 12] = [
+        31,
+        if is_leap(year) { 29 } else { 28 },
+        31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+    ];
+    let mut month = 1u64;
+    for &dim in &months {
+        if days < dim {
+            break;
+        }
+        days -= dim;
+        month += 1;
+    }
+    (year, month, days + 1)
+}
+
+fn is_leap(year: u64) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
 }
 
 fn main() {
@@ -93,6 +247,7 @@ fn main() {
             exclude,
             fail_on,
             disable_check,
+            watch,
         } => {
             if no_color || std::env::var_os("NO_COLOR").is_some() {
                 colored::control::set_override(false);
@@ -159,77 +314,90 @@ fn main() {
             let active_checks = default_checks_with_config(&all_disabled, extra_sensitive);
 
             let includes: Vec<String> = include.into_iter().collect();
-            match scan_directory_with_checks(&path, &exclude, &includes, &active_checks) {
-                Ok((results, files_scanned, files_skipped)) => {
-                    let findings: Vec<Finding> =
-                        results.into_iter().flat_map(|r| r.findings).collect();
-                    let should_fail = findings
-                        .iter()
-                        .any(|f| f.severity <= fail_threshold);
 
-                    if json {
-                        if !quiet || should_fail {
-                            match json_payload(&findings, files_scanned) {
-                                Ok(payload) => {
-                                    if let Some(ref out_path) = output {
-                                        if let Err(e) = write_output(out_path, &payload) {
-                                            eprintln!("{} {}", "error:".red().bold(), e);
-                                            std::process::exit(2);
-                                        }
-                                    } else {
-                                        println!("{payload}");
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("{} {}", "error:".red().bold(), e);
-                                    std::process::exit(2);
-                                }
-                            }
-                        }
-                    } else if sarif {
-                        if !quiet || should_fail {
-                            let payload =
-                                serde_json::to_string_pretty(&build_sarif(&findings)).unwrap();
-                            if let Some(ref out_path) = output {
-                                if let Err(e) = write_output(out_path, &payload) {
-                                    eprintln!("{} {}", "error:".red().bold(), e);
-                                    std::process::exit(2);
-                                }
-                            } else {
-                                println!("{payload}");
-                            }
-                        }
-                    } else if markdown {
-                        if !quiet || should_fail {
-                            print_markdown(&findings);
-                        }
-                    } else if !quiet || should_fail {
-                        let (display, truncated) = truncate(&findings, 0);
-                        print_pretty(display, files_scanned, path.display().to_string(), truncated);
-                    }
+            // Build a ScanOptions struct to pass around cleanly.
+            let opts = ScanOptions {
+                path: path.clone(),
+                json,
+                sarif,
+                markdown,
+                output: output.clone(),
+                quiet,
+                verbose,
+                fail_threshold,
+                exclude: exclude.clone(),
+                includes: includes.clone(),
+            };
 
-                    if verbose {
-                        eprintln!("Scanned {} file(s).", files_scanned);
-                        if files_skipped > 0 {
-                            eprintln!(
-                                "Skipped {} generated file(s) from analysis.",
-                                files_skipped
-                            );
-                        }
-                    }
+            // Run the initial scan.
+            let exit_code = run_scan(&opts, &active_checks);
 
-                    if should_fail {
-                        std::process::exit(1);
-                    }
+            if !watch {
+                // Not in watch mode — preserve original exit-code behaviour.
+                if exit_code != 0 {
+                    std::process::exit(exit_code);
                 }
-                Err(e) => {
-                    if json {
-                        let envelope = serde_json::json!({ "error": e.to_string() });
-                        println!("{}", serde_json::to_string_pretty(&envelope).unwrap());
-                    } else {
-                        eprintln!("{} {}", "error:".red().bold(), e);
+            } else {
+                // Watch mode: set up a notify watcher, block until Ctrl-C.
+                eprintln!(
+                    "{}",
+                    format!(
+                        "\nWatching {} for .rs file changes. Press Ctrl-C to exit.",
+                        path.display()
+                    )
+                    .dimmed()
+                );
+
+                let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
+
+                let mut watcher =
+                    notify::recommended_watcher(move |res| {
+                        let _ = tx.send(res);
+                    })
+                    .unwrap_or_else(|e| {
+                        eprintln!("{} failed to create file watcher: {}", "error:".red().bold(), e);
+                        std::process::exit(2);
+                    });
+
+                watcher
+                    .watch(&path, RecursiveMode::Recursive)
+                    .unwrap_or_else(|e| {
+                        eprintln!("{} failed to watch path: {}", "error:".red().bold(), e);
+                        std::process::exit(2);
+                    });
+
+                for res in rx {
+                    match res {
+                        Ok(event) => {
+                            // Only react to create/modify events on .rs files.
+                            let is_relevant = matches!(
+                                event.kind,
+                                EventKind::Create(_) | EventKind::Modify(_)
+                            ) && event.paths.iter().any(|p| {
+                                p.extension().map(|e| e == "rs").unwrap_or(false)
+                            });
+
+                            if is_relevant {
+                                // Clear terminal for a clean view.
+                                print!("\x1B[2J\x1B[1;1H");
+
+                                // Print a timestamped re-scan header.
+                                let now = chrono_timestamp();
+                                eprintln!(
+                                    "{}",
+                                    format!("[{}] File changed — re-scanning...", now)
+                                        .cyan()
+                                        .bold()
+                                );
+
+                                run_scan(&opts, &active_checks);
+                                // In watch mode we never exit on findings — keep watching.
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("{} watcher error: {}", "error:".red().bold(), e);
+                        }
                     }
-                    std::process::exit(2);
                 }
             }
         }
