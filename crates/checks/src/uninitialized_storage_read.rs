@@ -5,7 +5,7 @@
 //! on it panics and aborts the contract invocation, which can brick a contract
 //! or be exploited by an attacker who triggers the panic intentionally.
 
-use crate::util::contractimpl_functions_excluding_test;
+use crate::util::{contractimpl_functions_excluding_test, receiver_chain_contains_storage};
 use crate::{Check, Finding, Severity};
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
@@ -41,19 +41,6 @@ fn is_storage_get(expr: &Expr) -> bool {
             }
             is_storage_get(&m.receiver)
         }
-        _ => false,
-    }
-}
-
-fn receiver_chain_contains_storage(expr: &Expr) -> bool {
-    match expr {
-        Expr::MethodCall(m) => {
-            if m.method == "storage" {
-                return true;
-            }
-            receiver_chain_contains_storage(&m.receiver)
-        }
-        Expr::Field(f) => receiver_chain_contains_storage(&f.base),
         _ => false,
     }
 }

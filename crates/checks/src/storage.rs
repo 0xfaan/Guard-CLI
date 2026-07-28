@@ -1,6 +1,9 @@
 //! Risky Soroban storage usage: temporary persistence and caller-derived `Symbol` keys.
 
-use crate::util::contractimpl_functions_excluding_test;
+use crate::util::{
+    contractimpl_functions_excluding_test, receiver_chain_contains_storage,
+    receiver_chain_contains_temporary,
+};
 use crate::{Check, Finding, Severity};
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
@@ -28,32 +31,6 @@ impl Check for UnsafeStoragePatternsCheck {
             v.visit_block(&method.block);
         }
         out
-    }
-}
-
-fn receiver_chain_contains_storage(expr: &Expr) -> bool {
-    match expr {
-        Expr::MethodCall(m) => {
-            if m.method == "storage" {
-                return true;
-            }
-            receiver_chain_contains_storage(&m.receiver)
-        }
-        Expr::Field(f) => receiver_chain_contains_storage(&f.base),
-        _ => false,
-    }
-}
-
-fn receiver_chain_contains_temporary(expr: &Expr) -> bool {
-    match expr {
-        Expr::MethodCall(m) => {
-            if m.method == "temporary" {
-                return true;
-            }
-            receiver_chain_contains_temporary(&m.receiver)
-        }
-        Expr::Field(f) => receiver_chain_contains_temporary(&f.base),
-        _ => false,
     }
 }
 
