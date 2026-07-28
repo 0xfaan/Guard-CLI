@@ -226,6 +226,8 @@ fn all_checks_base() -> Vec<Box<dyn Check + Send + Sync>> {
         Box::new(MissingNonceCheck),
         Box::new(UninitializedStorageReadCheck),
         Box::new(ReentrancyRiskCheck),
+        Box::new(MissingEventForAdminChangeCheck),
+        Box::new(MissingInputLengthBoundCheck),
     ]
 }
 
@@ -252,14 +254,41 @@ pub fn default_checks_with_config(
     disabled: &[String],
     extra_sensitive_names: &[String],
 ) -> Vec<Box<dyn Check + Send + Sync>> {
-    let mut checks = all_checks_base();
-    // Replace the plain UnprotectedAdminCheck with the config-aware variant.
-    for check in checks.iter_mut() {
-        if check.name() == "unprotected-admin" {
-            *check = Box::new(UnprotectedAdminCheck::with_extra_names(extra_sensitive_names.to_vec()));
-            break;
-        }
-    }
+    let mut checks: Vec<Box<dyn Check + Send + Sync>> = vec![
+        Box::new(MissingRequireAuthCheck),
+        Box::new(UncheckedArithmeticCheck),
+        Box::new(UnprotectedAdminCheck::with_extra_names(extra_sensitive_names.to_vec())),
+        Box::new(UnsafeStoragePatternsCheck),
+        Box::new(MissingTtlExtensionCheck),
+        Box::new(ForbiddenStdImportsCheck),
+        Box::new(HardcodedAddressCheck),
+        Box::new(UnsafeCrossContractInputCheck),
+        Box::new(MissingContractAnnotationCheck),
+        Box::new(DelegateCallRiskCheck),
+        Box::new(IntegerDivisionTruncationCheck),
+        Box::new(MissingEventEmissionCheck),
+        Box::new(SymbolKeyCollisionCheck),
+        Box::new(SelfTransferCheck),
+        Box::new(MissingZeroAddressCheck),
+        Box::new(MutableGlobalStateCheck),
+        Box::new(ReInitializationRiskCheck),
+        Box::new(UncheckedInvokeReturnCheck),
+        Box::new(MissingBalanceCheck),
+        Box::new(UnboundedVecGrowthCheck),
+        Box::new(UnsafeRandomnessCheck),
+        Box::new(UncheckedDivisorCheck),
+        Box::new(PanicInContractCheck),
+        Box::new(UnprotectedUpgradeCheck),
+        Box::new(UnprotectedTokenMintCheck),
+        Box::new(UnprotectedContractDeploymentCheck),
+        Box::new(UncheckedTokenAmountCheck),
+        Box::new(LargeLoopCheck),
+        Box::new(MissingNonceCheck),
+        Box::new(UninitializedStorageReadCheck),
+        Box::new(ReentrancyRiskCheck),
+        Box::new(MissingEventForAdminChangeCheck),
+        Box::new(MissingInputLengthBoundCheck),
+    ];
     checks.retain(|c| !disabled.contains(&c.name().to_string()));
     checks
 }

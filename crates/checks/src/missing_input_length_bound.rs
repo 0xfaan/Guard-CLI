@@ -28,7 +28,7 @@ impl<'ast> Visit<'ast> for InputLengthVisitor {
         if has_contractimpl_attr(&node.attrs) {
             for item in &node.items {
                 if let ImplItem::Fn(method) = item {
-                    if method.sig.vis.is_pub() {
+                    if matches!(method.vis, syn::Visibility::Public(_)) {
                         let bytes_vec_params = find_bytes_vec_params(&method.sig.inputs);
                         for (param_name, _) in bytes_vec_params {
                             if !has_length_check(&method.block, &param_name) {

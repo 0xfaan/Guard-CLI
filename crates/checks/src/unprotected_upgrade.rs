@@ -30,7 +30,7 @@ impl<'ast> Visit<'ast> for UpgradeVisitor {
             for item in &node.items {
                 if let ImplItem::Fn(method) = item {
                     let name = method.sig.ident.to_string();
-                    if is_sensitive_name(&name) && method.sig.vis.is_pub() {
+                    if is_sensitive_name(&name) && matches!(method.vis, syn::Visibility::Public(_)) {
                         let has_auth = contains_auth_call(&method.block);
                         if !has_auth {
                             self.findings.push(Finding {
