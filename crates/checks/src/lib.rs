@@ -226,6 +226,7 @@ fn all_checks_base() -> Vec<Box<dyn Check + Send + Sync>> {
         Box::new(MissingNonceCheck),
         Box::new(UninitializedStorageReadCheck),
         Box::new(ReentrancyRiskCheck),
+        Box::new(AuthAfterStorageWriteCheck),
         Box::new(MissingEventForAdminChangeCheck),
         Box::new(MissingInputLengthBoundCheck),
     ]
@@ -286,6 +287,7 @@ pub fn default_checks_with_config(
         Box::new(MissingNonceCheck),
         Box::new(UninitializedStorageReadCheck),
         Box::new(ReentrancyRiskCheck),
+        Box::new(AuthAfterStorageWriteCheck),
         Box::new(MissingEventForAdminChangeCheck),
         Box::new(MissingInputLengthBoundCheck),
     ];
