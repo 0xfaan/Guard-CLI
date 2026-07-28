@@ -15,17 +15,20 @@ cli → analyzer → checks
 
 ## Data flow
 
-1. The CLI calls `scan_directory` with the requested path.
+1. The CLI calls `scan_directory_with_checks` with the requested path and the config/CLI-filtered
+   `active_checks` list — not `scan_directory`, since the CLI needs to honor `--disable-check` and
+   `soroban-guard.toml`. `scan_directory` (the config-free variant) is used only by tests and the
+   fixture test helper.
 2. The analyzer walks the directory and filters it to applicable `.rs` files.
 3. Each file is read and parsed with `syn::parse_file` into a `syn::File`.
-4. The analyzer calls `Check::run` for every check returned by `default_checks()`.
+4. The analyzer calls `Check::run` for every check in `active_checks`.
 5. Findings from all files and checks are collected into a `Vec<Finding>`, assigned relative file
    paths, sorted, and returned to the CLI.
 6. The CLI renders terminal or JSON output and exits according to the highest severity found.
 
 ```text
 source directory
-    → scan_directory
+    → scan_directory_with_checks
     → Rust files
     → syn::parse_file
     → each Check::run

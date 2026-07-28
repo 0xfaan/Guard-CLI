@@ -4,15 +4,39 @@
 //! findings are concatenated with no shared mutable state between checks.
 
 use rayon::prelude::*;
+use soroban_guard_checks::util::contractimpl_functions_with_type_excluding_test;
 use soroban_guard_checks::{default_checks, Check, Finding};
 use std::collections::HashSet;
 use std::io::BufRead;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
+use syn::spanned::Spanned;
 use thiserror::Error;
 use walkdir::WalkDir;
 
 const SUPPRESSION_PREFIX: &str = "// soroban-guard: allow(";
+
+/// The source line range of one `#[contractimpl]` method, paired with its enclosing type's
+/// name — used to scope function-level suppressions to the specific `impl` block they were
+/// written above, instead of matching any same-named method anywhere in the file.
+struct FnSpan {
+    impl_type: String,
+    function_name: String,
+    start_line: usize,
+    end_line: usize,
+}
+
+fn build_fn_spans(file: &syn::File) -> Vec<FnSpan> {
+    contractimpl_functions_with_type_excluding_test(file)
+        .into_iter()
+        .map(|(impl_type, method)| FnSpan {
+            impl_type,
+            function_name: method.sig.ident.to_string(),
+            start_line: method.sig.ident.span().start().line,
+            end_line: method.block.span().end().line,
+        })
+        .collect()
+}
 
 #[derive(Error, Debug)]
 pub enum ScanError {
@@ -33,7 +57,9 @@ pub enum ScanError {
 #[derive(Default)]
 struct Suppressions {
     line_checks: HashSet<(usize, String)>,
-    function_checks: HashSet<(String, String)>,
+    /// Keyed on `(impl_type, function_name, check_name)` so a suppression above one
+    /// `#[contractimpl]` method doesn't also silence a same-named method on a different type.
+    function_checks: HashSet<(String, String, String)>,
 }
 
 fn has_generated_file_header(path: &Path) -> Result<bool, std::io::Error> {
@@ -82,7 +108,7 @@ fn function_name_from_line(line: &str) -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
-fn parse_suppressions(source: &str) -> Suppressions {
+fn parse_suppressions(source: &str, fn_spans: &[FnSpan]) -> Suppressions {
     let lines: Vec<&str> = source.lines().collect();
     let mut suppressions = Suppressions::default();
 
@@ -95,10 +121,16 @@ fn parse_suppressions(source: &str) -> Suppressions {
             continue;
         };
         if let Some(function_name) = function_name_from_line(target_line) {
+            let target_line_number = target_idx + 1;
+            let impl_type = fn_spans
+                .iter()
+                .find(|s| s.start_line == target_line_number && s.function_name == function_name)
+                .map(|s| s.impl_type.clone())
+                .unwrap_or_default();
             for check in checks {
                 suppressions
                     .function_checks
-                    .insert((function_name.clone(), check));
+                    .insert((impl_type.clone(), function_name.clone(), check));
             }
         } else {
             let target_line_number = target_idx + 1;
@@ -111,13 +143,27 @@ fn parse_suppressions(source: &str) -> Suppressions {
     suppressions
 }
 
-fn is_suppressed(finding: &Finding, suppressions: &Suppressions) -> bool {
-    suppressions
+fn is_suppressed(finding: &Finding, suppressions: &Suppressions, fn_spans: &[FnSpan]) -> bool {
+    if suppressions
         .line_checks
         .contains(&(finding.line, finding.check_name.clone()))
-        || suppressions
-            .function_checks
-            .contains(&(finding.function_name.clone(), finding.check_name.clone()))
+    {
+        return true;
+    }
+    let impl_type = fn_spans
+        .iter()
+        .find(|s| {
+            s.function_name == finding.function_name
+                && s.start_line <= finding.line
+                && finding.line <= s.end_line
+        })
+        .map(|s| s.impl_type.clone())
+        .unwrap_or_default();
+    suppressions.function_checks.contains(&(
+        impl_type,
+        finding.function_name.clone(),
+        finding.check_name.clone(),
+    ))
 }
 
 fn dedup_findings(findings: &mut Vec<Finding>) {
@@ -207,7 +253,8 @@ fn run_checks_for_file(
             .to_string_lossy()
             .to_string()
     };
-    let suppressions = parse_suppressions(&content);
+    let fn_spans = build_fn_spans(&syn_file);
+    let suppressions = parse_suppressions(&content, &fn_spans);
 
     let mut findings: Vec<Finding> = checks
         .iter()
@@ -240,7 +287,7 @@ fn run_checks_for_file(
                 }
             }
         })
-        .filter(|finding| !is_suppressed(finding, &suppressions))
+        .filter(|finding| !is_suppressed(finding, &suppressions, &fn_spans))
         .collect();
 
     findings.sort_by_key(|f| f.line);
