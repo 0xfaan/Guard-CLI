@@ -233,6 +233,7 @@ pub fn default_checks() -> Vec<Box<dyn Check + Send + Sync>> {
         Box::new(MissingNonceCheck),
         Box::new(UninitializedStorageReadCheck),
         Box::new(ReentrancyRiskCheck),
+        Box::new(AuthAfterStorageWriteCheck),
     ]
 }
 
@@ -275,6 +276,7 @@ pub fn default_checks_with_config(
         Box::new(MissingNonceCheck),
         Box::new(UninitializedStorageReadCheck),
         Box::new(ReentrancyRiskCheck),
+        Box::new(AuthAfterStorageWriteCheck),
     ];
     checks.retain(|c| !disabled.contains(&c.name().to_string()));
     checks

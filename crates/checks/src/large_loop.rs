@@ -90,6 +90,9 @@ impl<'ast> Visit<'ast> for LoopFinder {
             Expr::While(_) => {
                 self.loops.push((node.span().start().line, "while".to_string()));
             }
+            Expr::ForLoop(_) => {
+                self.loops.push((node.span().start().line, "for".to_string()));
+            }
             _ => {}
         }
         visit::visit_expr(self, node);

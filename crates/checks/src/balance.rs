@@ -57,6 +57,7 @@ struct BodyScan {
     has_transfer: bool,
     has_balance_check: bool,
     transfer_line: Option<usize>,
+    balance_line: Option<usize>,
 }
 
 impl<'ast> Visit<'ast> for BodyScan {
@@ -69,7 +70,16 @@ impl<'ast> Visit<'ast> for BodyScan {
             }
         }
         if matches!(method.as_str(), "balance" | "authorized") {
-            self.has_balance_check = true;
+            let line = i.method.span().start().line;
+            // Only count a balance check that precedes the first transfer.
+            let before_transfer = match self.transfer_line {
+                Some(tl) => line < tl,
+                None => true,
+            };
+            if before_transfer {
+                self.has_balance_check = true;
+                self.balance_line = Some(line);
+            }
         }
         visit::visit_expr_method_call(self, i);
     }

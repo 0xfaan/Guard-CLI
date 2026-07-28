@@ -24,18 +24,19 @@ impl Check for SymbolKeyCollisionCheck {
                 let mut symbol_keys = std::collections::HashMap::new();
                 let mut visitor = SymbolKeyVisitor {
                     symbol_keys: &mut symbol_keys,
+                    current_function: String::new(),
                 };
                 visitor.visit_item_impl(impl_block);
 
                 for (key, positions) in symbol_keys {
                     if positions.len() > 1 {
-                        for (pos, line) in positions.iter().skip(1) {
+                        for (pos, line, fn_name) in positions.iter().skip(1) {
                             findings.push(Finding {
                                 check_name: CHECK_NAME.to_string(),
                                 severity: Severity::Medium,
                                 file_path: String::new(),
                                 line: *line,
-                                function_name: String::new(),
+                                function_name: fn_name.clone(),
                                 description: format!(
                                     "Duplicate symbol key `{}` found at position {}",
                                     key, pos
@@ -54,10 +55,17 @@ impl Check for SymbolKeyCollisionCheck {
 }
 
 struct SymbolKeyVisitor<'a> {
-    symbol_keys: &'a mut std::collections::HashMap<String, Vec<(usize, usize)>>,
+    symbol_keys: &'a mut std::collections::HashMap<String, Vec<(usize, usize, String)>>,
+    current_function: String,
 }
 
 impl<'ast, 'a> Visit<'ast> for SymbolKeyVisitor<'a> {
+    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
+        let prev = std::mem::replace(&mut self.current_function, node.sig.ident.to_string());
+        visit::visit_impl_item_fn(self, node);
+        self.current_function = prev;
+    }
+
     fn visit_macro(&mut self, m: &'ast Macro) {
         if let Some(last_segment) = m.path.segments.last() {
             if last_segment.ident == "symbol_short" {
@@ -70,7 +78,7 @@ impl<'ast, 'a> Visit<'ast> for SymbolKeyVisitor<'a> {
                     self.symbol_keys
                         .entry(key)
                         .or_default()
-                        .push((pos, line));
+                        .push((pos, line, self.current_function.clone()));
                 }
             }
         }
