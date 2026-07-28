@@ -28,7 +28,7 @@ impl<'ast> Visit<'ast> for DeploymentVisitor {
         if has_contractimpl_attr(&node.attrs) {
             for item in &node.items {
                 if let ImplItem::Fn(method) = item {
-                    if method.sig.vis.is_pub() {
+                    if matches!(method.vis, syn::Visibility::Public(_)) {
                         let (has_deployer, line) = has_deployer_call(&method.block);
                         let has_auth = contains_auth_call(&method.block);
 
