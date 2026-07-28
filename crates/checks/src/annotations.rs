@@ -22,19 +22,20 @@ impl Check for MissingContractAnnotationCheck {
     }
 
     fn run(&self, file: &File, _source: &str) -> Vec<Finding> {
-        let has_contract_struct = file.items.iter().any(|item| {
-            if let Item::Struct(s) = item {
-                has_attr(&s.attrs, "contract")
-            } else {
-                false
-            }
-        });
+        let contract_struct_names: std::collections::HashSet<String> = file
+            .items
+            .iter()
+            .filter_map(|item| {
+                if let Item::Struct(s) = item {
+                    if has_attr(&s.attrs, "contract") {
+                        return Some(s.ident.to_string());
+                    }
+                }
+                None
+            })
+            .collect();
 
-        if has_contract_struct {
-            return vec![];
-        }
-
-        // Report every `#[contractimpl]` block that lacks a sibling `#[contract]` struct.
+        // Report every `#[contractimpl]` block whose type lacks a matching `#[contract]` struct.
         file.items
             .iter()
             .filter_map(|item| {
@@ -48,6 +49,9 @@ impl Check for MissingContractAnnotationCheck {
                                 .unwrap_or_else(|| "unknown".to_string()),
                             _ => "unknown".to_string(),
                         };
+                        if contract_struct_names.contains(&type_name) {
+                            return None;
+                        }
                         return Some(Finding {
                             check_name: CHECK_NAME.to_string(),
                             severity: Severity::Low,
