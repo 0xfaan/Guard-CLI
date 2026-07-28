@@ -188,19 +188,12 @@ pub fn group_by_severity<'a>(findings: &'a [Finding]) -> BTreeMap<Severity, Vec<
     map
 }
 
-/// All checks executed by the analyzer (extend here as you add detectors).
+/// Base list of all built-in checks, using the plain (no-config) constructor for every check.
 ///
-/// Checks are **stateless and isolated**: implementations must not use shared
-/// mutable static state or assume a particular invocation order. The analyzer
-/// runs each check against the same parsed `syn::File` independently and
-/// concatenates `Finding`s.
-///
-/// # Panics
-///
-/// Panics immediately if any two checks share the same [`Check::name`] string.
-/// This catches copy-paste errors when adding a new detector before they can
-/// cause silent finding collisions at runtime.
-pub fn default_checks() -> Vec<Box<dyn Check + Send + Sync>> {
+/// This is the single source of truth for the check list. Both [`default_checks`] and
+/// [`default_checks_with_config`] derive their lists from this function so that adding or
+/// removing a check only requires editing one place.
+fn all_checks_base() -> Vec<Box<dyn Check + Send + Sync>> {
     vec![
         Box::new(MissingRequireAuthCheck),
         Box::new(UncheckedArithmeticCheck),
@@ -234,7 +227,25 @@ pub fn default_checks() -> Vec<Box<dyn Check + Send + Sync>> {
         Box::new(UninitializedStorageReadCheck),
         Box::new(ReentrancyRiskCheck),
         Box::new(AuthAfterStorageWriteCheck),
+        Box::new(MissingEventForAdminChangeCheck),
+        Box::new(MissingInputLengthBoundCheck),
     ]
+}
+
+/// All checks executed by the analyzer (extend here as you add detectors).
+///
+/// Checks are **stateless and isolated**: implementations must not use shared
+/// mutable static state or assume a particular invocation order. The analyzer
+/// runs each check against the same parsed `syn::File` independently and
+/// concatenates `Finding`s.
+///
+/// # Panics
+///
+/// Panics immediately if any two checks share the same [`Check::name`] string.
+/// This catches copy-paste errors when adding a new detector before they can
+/// cause silent finding collisions at runtime.
+pub fn default_checks() -> Vec<Box<dyn Check + Send + Sync>> {
+    all_checks_base()
 }
 
 /// Like [`default_checks`] but applies config-file settings:
@@ -277,6 +288,8 @@ pub fn default_checks_with_config(
         Box::new(UninitializedStorageReadCheck),
         Box::new(ReentrancyRiskCheck),
         Box::new(AuthAfterStorageWriteCheck),
+        Box::new(MissingEventForAdminChangeCheck),
+        Box::new(MissingInputLengthBoundCheck),
     ];
     checks.retain(|c| !disabled.contains(&c.name().to_string()));
     checks

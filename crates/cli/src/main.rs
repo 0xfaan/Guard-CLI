@@ -60,24 +60,9 @@ enum Commands {
         /// Disable a named check (may be repeated)
         #[arg(long, value_name = "CHECK")]
         disable_check: Vec<String>,
-        /// Disable ANSI color output (equivalent to setting NO_COLOR=1)
-        #[arg(long)]
-        no_color: bool,
     },
     /// List the checks that are enabled by default
     ListChecks,
-    /// Explain a check by name
-    Explain {
-        /// Check name to explain
-        check_name: String,
-    },
-    /// Generate shell completions
-    Completions {
-        /// Shell to generate completions for
-        shell: Shell,
-    },
-    /// Print version and build information
-    Version,
     /// Print full documentation for a named check
     Explain {
         /// Name of the check (e.g. `missing-require-auth`)
@@ -88,6 +73,8 @@ enum Commands {
         /// Shell to generate completions for
         shell: Shell,
     },
+    /// Print version and build information
+    Version,
 }
 
 fn main() {
@@ -106,10 +93,8 @@ fn main() {
             exclude,
             fail_on,
             disable_check,
-            no_color,
         } => {
-            let no_color = std::env::var_os("NO_COLOR").is_some();
-            if no_color {
+            if no_color || std::env::var_os("NO_COLOR").is_some() {
                 colored::control::set_override(false);
             }
             // Mutual exclusion
@@ -143,8 +128,7 @@ fn main() {
                 _ => Severity::High,
             };
 
-            // Merge config disabled list with --disable-check flags (CLI takes precedence /
-            // union: both sources contribute to the disabled set).
+            // Merge config disabled list with --disable-check flags.
             let mut all_disabled: Vec<String> = cfg.checks.disabled.clone();
             for name in &disable_check {
                 if !all_disabled.contains(name) {
@@ -179,11 +163,6 @@ fn main() {
                 Ok((results, files_scanned, files_skipped)) => {
                     let findings: Vec<Finding> =
                         results.into_iter().flat_map(|r| r.findings).collect();
-                    let any_high = findings
-                        .iter()
-                        .any(|f| matches!(f.severity, Severity::High));
-            match scan_directory_with_checks(&path, &[], &includes, &active_checks) {
-                Ok((findings, files_scanned, files_skipped)) => {
                     let should_fail = findings
                         .iter()
                         .any(|f| f.severity <= fail_threshold);
@@ -227,25 +206,16 @@ fn main() {
                     } else if !quiet || should_fail {
                         let (display, truncated) = truncate(&findings, 0);
                         print_pretty(display, files_scanned, path.display().to_string(), truncated);
-                    } else {
-                        if !quiet || should_fail {
-                            let (display, truncated) = truncate(&findings, 0);
-                            print_pretty(
-                                display,
-                                files_scanned,
-                                path.display().to_string(),
-                                truncated,
-                            );
-                        }
                     }
 
                     if verbose {
                         eprintln!("Scanned {} file(s).", files_scanned);
-                    if verbose && files_skipped > 0 {
-                        eprintln!(
-                            "Skipped {} generated file(s) from analysis.",
-                            files_skipped
-                        );
+                        if files_skipped > 0 {
+                            eprintln!(
+                                "Skipped {} generated file(s) from analysis.",
+                                files_skipped
+                            );
+                        }
                     }
 
                     if should_fail {
@@ -301,36 +271,12 @@ fn main() {
     }
 }
 
-#[allow(dead_code)]
-fn parse_severity(s: &str) -> Severity {
-    match s.to_lowercase().as_str() {
-        "high" => Severity::High,
-        "medium" => Severity::Medium,
-        _ => Severity::Low,
-    }
-}
-
 /// Returns (slice to display, count of truncated findings).
-#[allow(dead_code)]
 fn truncate(findings: &[Finding], max: usize) -> (&[Finding], usize) {
     if max == 0 || findings.len() <= max {
         (findings, 0)
     } else {
         (&findings[..max], findings.len() - max)
-    }
-}
-
-#[allow(dead_code)]
-fn emit_gha_annotations(findings: &[Finding]) {
-    for f in findings {
-        let level = match f.severity {
-            Severity::High => "error",
-            Severity::Medium | Severity::Low => "warning",
-        };
-        println!(
-            "::{} file={},line={},title={}::{}",
-            level, f.file_path, f.line, f.check_name, f.description
-        );
     }
 }
 
@@ -386,84 +332,6 @@ fn severity_to_sarif_level(severity: Severity) -> &'static str {
         Severity::High => "error",
         Severity::Medium => "warning",
         Severity::Low => "note",
-    }
-}
-
-fn explain_details(name: &str) -> &'static str {
-    describe_rule(name)
-}
-
-fn describe_rule(name: &str) -> &'static str {
-    match name {
-        "missing-require-auth" => "Method writes to storage without env.require_auth()",
-        "unchecked-arithmetic" => "Wrapping arithmetic operations may overflow",
-        "unprotected-admin" => "Sensitive admin entrypoints lack an authorization gate",
-        "unsafe-storage-patterns" => "Temporary storage or dynamic Symbol keys are risky",
-        "missing-ttl-extension" => "Persistent entries may expire without TTL bump",
-        "forbidden-std-imports" => "Crate imports std which is forbidden in no_std contracts",
-        "hardcoded-address" => "Contract contains a hardcoded Stellar address string",
-        "unsafe-cross-contract-input" => "Cross-contract call return value used without validation",
-        "missing-contract-annotation" => "Struct missing #[contract] annotation",
-        "delegate-call-risk" => "Delegate-style call pattern can transfer control unexpectedly",
-        "integer-division-truncation" => "Integer division silently truncates the remainder",
-        "missing-event-emission" => "State-mutating function emits no events",
-        "symbol-key-collision" => "Multiple storage keys share the same Symbol value",
-        "self-transfer" => "Token transfer destination may equal the sender",
-        "missing-zero-address-check" => "Address argument not validated against the zero address",
-        "mutable-global-state" => "Mutable global state is unsafe and not persisted on-chain",
-        "re-initialization-risk" => "Initializer-like function can overwrite critical state",
-        "unchecked-invoke-return" => "Cross-contract invocation result is discarded",
-        "missing-balance-check" => "Token transfer occurs without a balance or authorization check",
-        "unbounded-vec-growth" => "Storage-backed Vec can grow without a bound",
-        "unsafe-randomness" => "Ledger data is used as a randomness source",
-        "unchecked-divisor" => "Division uses a runtime divisor without a zero guard",
-        "reentrancy-risk" => "Storage write followed by cross-contract invocation risks reentrancy",
-        "panic-in-contract" => "Contract uses panic!, unwrap, or expect which abort the WASM execution",
-        "mutable-global-state" => "Mutable static declarations at module scope are unsafe in Soroban",
-        "re-initialization-risk" => "Init functions should guard against re-entry",
-        "unchecked-invoke-return" => "Cross-contract calls must have their return values checked",
-        "missing-balance-check" => "Token transfers should verify sufficient balance",
-        "unbounded-vec-growth" => "Vecs in storage must have bounded growth to avoid ledger limits",
-        "unsafe-randomness" => "Timestamp and sequence are predictable, not random",
-        "unchecked-divisor" => "Divisor must be validated to be non-zero",
-        _ => "Custom check",
-    }
-}
-
-fn describe_check(name: &str) -> (&'static str, &'static str) {
-    match name {
-        "missing-require-auth" => ("high", "Missing env.require_auth() before storage writes"),
-        "unchecked-arithmetic" => ("medium", "Flags unchecked arithmetic on contract state"),
-        "unprotected-admin" => ("high", "Flags privileged entrypoints without auth"),
-        "unsafe-storage-patterns" => ("medium", "Flags temporary storage and dynamic Symbol keys"),
-        "missing-ttl-extension" => ("medium", "Flags persistent storage entries without TTL extension"),
-        "forbidden-std-imports" => ("high", "Flags use of std in no_std Soroban contracts"),
-        "hardcoded-address" => ("medium", "Flags hardcoded Stellar address literals"),
-        "unsafe-cross-contract-input" => ("high", "Flags unvalidated return values from cross-contract calls"),
-        "missing-contract-annotation" => ("medium", "Flags structs missing the #[contract] attribute"),
-        "delegate-call-risk" => ("high", "Flags delegate-call patterns that transfer execution control"),
-        "integer-division-truncation" => ("medium", "Flags integer division that silently truncates"),
-        "missing-event-emission" => ("medium", "Flags state-mutating functions with no event emission"),
-        "symbol-key-collision" => ("medium", "Flags storage keys that share the same Symbol value"),
-        "self-transfer" => ("medium", "Flags token transfers where sender may equal receiver"),
-        "missing-zero-address-check" => ("medium", "Flags Address parameters not checked for the zero address"),
-        "mutable-global-state" => ("high", "Flags mutable global state in contract code"),
-        "re-initialization-risk" => ("high", "Flags initializer-like functions without re-init guards"),
-        "unchecked-invoke-return" => ("medium", "Flags discarded cross-contract call return values"),
-        "missing-balance-check" => ("high", "Flags token transfers without balance or authorization checks"),
-        "unbounded-vec-growth" => ("medium", "Flags storage-backed Vec growth without a length cap"),
-        "unsafe-randomness" => ("high", "Flags ledger timestamp or sequence as randomness"),
-        "unchecked-divisor" => ("high", "Flags division by runtime values without zero guards"),
-        "reentrancy-risk" => ("high", "Flags storage writes followed by cross-contract calls"),
-        "panic-in-contract" => ("medium", "Flags panic!, unwrap, and expect in contract methods"),
-        "mutable-global-state" => ("high", "Flags mutable static declarations at module scope"),
-        "re-initialization-risk" => ("high", "Flags init functions without re-entry guards"),
-        "unchecked-invoke-return" => ("medium", "Flags invoke_contract calls with ignored return values"),
-        "missing-balance-check" => ("high", "Flags token transfers without balance validation"),
-        "unbounded-vec-growth" => ("medium", "Flags Vecs that grow without bounds"),
-        "unsafe-randomness" => ("high", "Flags use of timestamp/sequence as randomness"),
-        "unchecked-divisor" => ("high", "Flags division operations with unchecked divisors"),
-        _ => ("low", "Custom detector"),
     }
 }
 
@@ -536,6 +404,86 @@ fn explain_details(name: &str) -> &'static str {
             "Reports division by runtime values without an apparent non-zero guard."
         }
         _ => "No detailed explanation is available for this custom check.",
+    }
+}
+
+fn describe_rule(name: &str) -> &'static str {
+    match name {
+        "missing-require-auth" => "Method writes to storage without env.require_auth()",
+        "unchecked-arithmetic" => "Wrapping arithmetic operations may overflow",
+        "unprotected-admin" => "Sensitive admin entrypoints lack an authorization gate",
+        "unsafe-storage-patterns" => "Temporary storage or dynamic Symbol keys are risky",
+        "missing-ttl-extension" => "Persistent entries may expire without TTL bump",
+        "forbidden-std-imports" => "Crate imports std which is forbidden in no_std contracts",
+        "hardcoded-address" => "Contract contains a hardcoded Stellar address string",
+        "unsafe-cross-contract-input" => "Cross-contract call return value used without validation",
+        "missing-contract-annotation" => "Struct missing #[contract] annotation",
+        "delegate-call-risk" => "Delegate-style call pattern can transfer control unexpectedly",
+        "integer-division-truncation" => "Integer division silently truncates the remainder",
+        "missing-event-emission" => "State-mutating function emits no events",
+        "symbol-key-collision" => "Multiple storage keys share the same Symbol value",
+        "self-transfer" => "Token transfer destination may equal the sender",
+        "missing-zero-address-check" => "Address argument not validated against the zero address",
+        "mutable-global-state" => "Mutable global state is unsafe and not persisted on-chain",
+        "re-initialization-risk" => "Initializer-like function can overwrite critical state",
+        "unchecked-invoke-return" => "Cross-contract invocation result is discarded",
+        "missing-balance-check" => "Token transfer occurs without a balance or authorization check",
+        "unbounded-vec-growth" => "Storage-backed Vec can grow without a bound",
+        "unsafe-randomness" => "Ledger data is used as a randomness source",
+        "unchecked-divisor" => "Division uses a runtime divisor without a zero guard",
+        "reentrancy-risk" => "Storage write followed by cross-contract invocation risks reentrancy",
+        "panic-in-contract" => "Contract uses panic!, unwrap, or expect which abort the WASM execution",
+        "unprotected-upgrade" => "Contract upgrade entrypoint lacks an authorization gate",
+        "unprotected-token-mint" => "Token mint entrypoint lacks an authorization gate",
+        "unprotected-contract-deployment" => "Contract deployment call lacks an authorization gate",
+        "unchecked-token-amount" => "Token amount used without validation",
+        "large-loop" => "Loop may iterate over an unbounded collection",
+        "missing-nonce" => "Function susceptible to replay attacks lacks a nonce check",
+        "uninitialized-storage-read" => "Storage value read without checking if it has been initialized",
+        "missing-event-for-admin-change" => "Admin-state change emits no event for off-chain indexers",
+        "missing-input-length-bound" => "Input collection used without a length bound check",
+        "auth-after-storage-write" => "Authorization check occurs after a storage write",
+        _ => "Custom check",
+    }
+}
+
+fn describe_check(name: &str) -> (&'static str, &'static str) {
+    match name {
+        "missing-require-auth" => ("high", "Missing env.require_auth() before storage writes"),
+        "unchecked-arithmetic" => ("medium", "Flags unchecked arithmetic on contract state"),
+        "unprotected-admin" => ("high", "Flags privileged entrypoints without auth"),
+        "unsafe-storage-patterns" => ("medium", "Flags temporary storage and dynamic Symbol keys"),
+        "missing-ttl-extension" => ("medium", "Flags persistent storage entries without TTL extension"),
+        "forbidden-std-imports" => ("high", "Flags use of std in no_std Soroban contracts"),
+        "hardcoded-address" => ("medium", "Flags hardcoded Stellar address literals"),
+        "unsafe-cross-contract-input" => ("high", "Flags unvalidated return values from cross-contract calls"),
+        "missing-contract-annotation" => ("medium", "Flags structs missing the #[contract] attribute"),
+        "delegate-call-risk" => ("high", "Flags delegate-call patterns that transfer execution control"),
+        "integer-division-truncation" => ("medium", "Flags integer division that silently truncates"),
+        "missing-event-emission" => ("medium", "Flags state-mutating functions with no event emission"),
+        "symbol-key-collision" => ("medium", "Flags storage keys that share the same Symbol value"),
+        "self-transfer" => ("medium", "Flags token transfers where sender may equal receiver"),
+        "missing-zero-address-check" => ("medium", "Flags Address parameters not checked for the zero address"),
+        "mutable-global-state" => ("high", "Flags mutable global state in contract code"),
+        "re-initialization-risk" => ("high", "Flags initializer-like functions without re-init guards"),
+        "unchecked-invoke-return" => ("medium", "Flags discarded cross-contract call return values"),
+        "missing-balance-check" => ("high", "Flags token transfers without balance or authorization checks"),
+        "unbounded-vec-growth" => ("medium", "Flags storage-backed Vec growth without a length cap"),
+        "unsafe-randomness" => ("high", "Flags ledger timestamp or sequence as randomness"),
+        "unchecked-divisor" => ("high", "Flags division by runtime values without zero guards"),
+        "reentrancy-risk" => ("high", "Flags storage writes followed by cross-contract calls"),
+        "panic-in-contract" => ("medium", "Flags panic!, unwrap, and expect in contract methods"),
+        "unprotected-upgrade" => ("high", "Flags upgrade entrypoints without authorization"),
+        "unprotected-token-mint" => ("high", "Flags token mint entrypoints without authorization"),
+        "unprotected-contract-deployment" => ("high", "Flags contract deployment calls without authorization"),
+        "unchecked-token-amount" => ("medium", "Flags token amounts used without validation"),
+        "large-loop" => ("medium", "Flags loops over unbounded collections"),
+        "missing-nonce" => ("medium", "Flags functions susceptible to replay attacks"),
+        "uninitialized-storage-read" => ("medium", "Flags storage reads without initialization checks"),
+        "missing-event-for-admin-change" => ("medium", "Flags admin changes with no event emission"),
+        "missing-input-length-bound" => ("medium", "Flags input collections without length bound checks"),
+        "auth-after-storage-write" => ("high", "Flags authorization checks after storage writes"),
+        _ => ("low", "Custom detector"),
     }
 }
 

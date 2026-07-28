@@ -125,6 +125,9 @@ fn dedup_findings(findings: &mut Vec<Finding>) {
     findings.retain(|f| seen.insert((f.file_path.clone(), f.line, f.check_name.clone())));
 }
 
+/// Collect `.rs` paths under `root`, applying exclude/include glob filters and skipping
+/// files that carry a generated-file header. Returns `(paths, files_skipped)` where
+/// `files_skipped` is the count of files omitted due to the generated-file header.
 fn collect_rust_paths(
     root: &Path,
     excludes: &[String],
@@ -245,9 +248,14 @@ fn run_checks_for_file(
     Ok(findings)
 }
 
-/// `root` is used to compute relative file labels in findings. `excludes` are glob patterns
-/// matched against each explicit file path relative to `root`.
-/// Recursively scan `.rs` files under `root` and aggregate findings from every check.
+/// Findings for a single source file.
+#[derive(Debug)]
+pub struct FileScanResult {
+    pub file_path: String,
+    pub findings: Vec<Finding>,
+}
+
+/// Recursively scan `.rs` files under `root` and aggregate findings from every default check.
 ///
 /// `root` may be a directory **or a single `.rs` file**. When a file path is given it is scanned
 /// directly without any directory walk.
@@ -258,306 +266,9 @@ fn run_checks_for_file(
 /// `includes` are glob patterns; when non-empty only files matching at least one pattern are
 /// scanned. When `includes` is empty all `.rs` files (minus excludes and generated-file
 /// headers) are scanned.
-pub fn scan_directory(
-    root: &Path,
-    excludes: &[String],
-    includes: &[String],
-) -> Result<(Vec<Finding>, usize, usize), ScanError> {
-    let root = root.canonicalize()?;
-
-    // Single-file fast path: skip the directory walk entirely.
-    if root.is_file() {
-        let content = std::fs::read_to_string(&root)?;
-        let syn_file = syn::parse_file(&content).map_err(|error| ScanError::Parse {
-            path: root.clone(),
-            message: error.to_string(),
-        })?;
-        let file_label = root.file_name().unwrap_or_default().to_string_lossy().to_string();
-        let checks = default_checks();
-        let mut findings: Vec<Finding> = checks
-            .iter()
-            .flat_map(|check| {
-                let mut hits = check.run(&syn_file, &content);
-                for f in &mut hits {
-                    f.file_path.clone_from(&file_label);
-                }
-                hits
-            })
-            .collect();
-        findings.sort_by(|a, b| a.line.cmp(&b.line));
-        return Ok((findings, 1, 0));
-    }
-
-/// `root` is used only to compute relative file labels in findings (same convention as
-/// [`scan_directory`]). `excludes` are glob patterns matched against each file's path
-/// relative to `root`; matching files are skipped.
-pub fn scan_files(
-    paths: &[PathBuf],
-    root: &Path,
-    excludes: &[String],
-) -> Result<(Vec<Finding>, usize), ScanError> {
-    let root = root.canonicalize()?;
-    let exclude_patterns: Vec<glob::Pattern> = excludes
-        .iter()
-        .filter_map(|p| glob::Pattern::new(p).ok())
-        .collect();
-    let include_patterns: Vec<glob::Pattern> = includes
-        .iter()
-        .filter_map(|p| glob::Pattern::new(p).ok())
-        .collect();
-
-    let entries: Vec<PathBuf> = WalkDir::new(&root)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            if !entry.file_type().is_file() {
-                return false;
-            }
-            let path = entry.path();
-            if path
-                .components()
-                .any(|c| matches!(c.as_os_str().to_str(), Some("target" | ".git")))
-            {
-                return false;
-            }
-            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
-                return false;
-            }
-            let label = path.strip_prefix(&root).unwrap_or(path);
-            if exclude_patterns
-    let checks = default_checks();
-
-    let filtered: Vec<PathBuf> = paths
-        .iter()
-        .filter(|path| {
-            let label = path.strip_prefix(&root).unwrap_or(path);
-            !exclude_patterns
-                .iter()
-                .any(|p| p.matches_path(label) || p.matches_path(path))
-            {
-                return false;
-            }
-            if !include_patterns.is_empty()
-                && !include_patterns
-                    .iter()
-                    .any(|p| p.matches_path(label) || p.matches_path(path))
-            {
-                return false;
-            }
-            true
-        })
-        .map(|e| e.path().to_path_buf())
-        .collect();
-
-    let mut files_skipped = 0;
-    let mut scan_paths = Vec::new();
-    for path in entries {
-        if has_generated_file_header(&path)? {
-            files_skipped += 1;
-            continue;
-        }
-        scan_paths.push(path);
-    }
-
-    // Excludes already applied above; pass empty slice to avoid double-filtering.
-    let (findings, files_scanned) = scan_files(&scan_paths, &root, &[])?;
-
-    Ok((findings, files_scanned, files_skipped))
-}
-
-/// Scan an explicit list of `.rs` file paths and aggregate findings from every check.
 ///
-/// `root` is used only to compute relative file labels in findings (same convention as
-/// [`scan_directory`]). `excludes` are glob patterns matched against each file's path
-/// relative to `root`; matching files are skipped.
-pub fn scan_files(
-    paths: &[PathBuf],
-    root: &Path,
-    excludes: &[String],
-) -> Result<(Vec<Finding>, usize), ScanError> {
-    let exclude_patterns: Vec<glob::Pattern> = excludes
-        .iter()
-        .filter_map(|p| glob::Pattern::new(p).ok())
-        .collect();
-
-    let filtered: Vec<&PathBuf> = paths
-        .iter()
-        .filter(|path| {
-            let label = path.strip_prefix(root).unwrap_or(path.as_path());
-            !exclude_patterns
-                .iter()
-                .any(|pat| pat.matches_path(label) || pat.matches_path(path))
-        })
-        .collect();
-
-        .cloned()
-        .collect();
-
-    let files_scanned = filtered.len();
-
-    let mut findings: Vec<Finding> = filtered
-        .par_iter()
-        .map(|path| {
-            let content = match std::fs::read_to_string(path) {
-                Ok(c) => c,
-                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-                    eprintln!("warning: skipping {} — permission denied", path.display());
-                    return Ok(Vec::new());
-                }
-                Err(e) => return Err(ScanError::Io(e)),
-            };
-            let syn_file = syn::parse_file(&content).map_err(|e| ScanError::Parse {
-                path: path.to_path_buf(),
-                message: e.to_string(),
-            })?;
-
-            let file_label = path
-                .strip_prefix(root)
-                .unwrap_or(path.as_path())
-                .to_string_lossy()
-                .to_string();
-
-            let file_findings: Vec<Finding> = checks
-                .iter()
-                .flat_map(|check| {
-                    let check_name = check.name().to_string();
-                    match catch_unwind(AssertUnwindSafe(|| check.run(&syn_file, &content))) {
-                        Ok(mut hits) => {
-                            for f in &mut hits {
-                                f.file_path.clone_from(&file_label);
-                            }
-                            hits
-                        }
-                        Err(payload) => {
-                            let message = if let Some(msg) = payload.downcast_ref::<&str>() {
-                                msg.to_string()
-                            } else if let Some(msg) = payload.downcast_ref::<String>() {
-                                msg.clone()
-                            } else {
-                                "panic payload was not a string".to_string()
-                            };
-                            eprintln!("warning: {}", ScanError::CheckPanic {
-                                check: check_name,
-                                path: path.to_path_buf(),
-                                message,
-                            });
-                            Vec::new()
-                        }
-                    }
-                })
-                .collect();
-
-            Ok(file_findings)
-        })
-        .map(|path| run_checks_for_file(path, &root, &checks))
-        .collect::<Result<Vec<Vec<Finding>>, ScanError>>()?
-        .into_iter()
-        .flatten()
-        .collect();
-
-    findings.sort_by(|a, b| {
-        a.file_path
-            .cmp(&b.file_path)
-            .then_with(|| a.line.cmp(&b.line))
-    });
-
-    Ok((findings, files_scanned))
-}
-
-/// Findings for a single source file.
-#[derive(Debug)]
-pub struct FileScanResult {
-    pub file_path: String,
-    pub findings: Vec<Finding>,
-}
-
-/// Scan a specific set of Rust files and aggregate findings from every check.
-pub fn scan_files(
-    paths: &[PathBuf],
-    root: &Path,
-    excludes: &[String],
-) -> Result<(Vec<Finding>, usize), ScanError> {
-    let root = root.canonicalize()?;
-    let exclude_patterns: Vec<glob::Pattern> = excludes
-        .iter()
-        .filter_map(|p| glob::Pattern::new(p).ok())
-        .collect();
-
-    let filtered: Vec<PathBuf> = paths
-        .iter()
-        .filter(|path| {
-            let label = path.strip_prefix(&root).unwrap_or(path);
-            !exclude_patterns
-                .iter()
-                .any(|pat| pat.matches_path(label) || pat.matches_path(path))
-        })
-        .cloned()
-        .collect();
-
-    let checks = default_checks();
-    let findings: Vec<Finding> = filtered
-        .par_iter()
-        .map(|path| {
-            let content = std::fs::read_to_string(path)?;
-            let syn_file = syn::parse_file(&content).map_err(|e| ScanError::Parse {
-                path: path.clone(),
-                message: e.to_string(),
-            })?;
-
-            let file_label = path
-                .strip_prefix(&root)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .to_string();
-
-            let mut file_findings: Vec<Finding> = checks
-                .iter()
-                .flat_map(|check| {
-                    let check_name = check.name().to_string();
-                    match catch_unwind(AssertUnwindSafe(|| check.run(&syn_file, &content))) {
-                        Ok(mut hits) => {
-                            for f in &mut hits {
-                                f.file_path.clone_from(&file_label);
-                            }
-                            hits
-                        }
-                        Err(payload) => {
-                            let message = if let Some(msg) = payload.downcast_ref::<&str>() {
-                                msg.to_string()
-                            } else if let Some(msg) = payload.downcast_ref::<String>() {
-                                msg.clone()
-                            } else {
-                                "panic payload was not a string".to_string()
-                            };
-                            eprintln!("warning: {}", ScanError::CheckPanic {
-                                check: check_name,
-                                path: path.clone(),
-                                message,
-                            });
-                            Vec::new()
-                        }
-                    }
-                })
-                .collect();
-
-            dedup_findings(&mut file_findings);
-            file_findings.sort_by_key(|a| a.line);
-            Ok(file_findings)
-        })
-/// Remove duplicate findings with the same `(file_path, line, check_name)`, keeping the first.
-fn dedup_findings(findings: &mut Vec<Finding>) {
-    let mut seen = std::collections::HashSet::new();
-    findings.retain(|f| seen.insert((f.file_path.clone(), f.line, f.check_name.clone())));
-    dedup_findings(&mut findings);
-    Ok((findings, files_scanned))
-}
-
-/// Recursively scan `.rs` files under `root` and aggregate findings from every default check.
-///
-/// `root` may be a directory or a single `.rs` file. `excludes` and `includes` are glob patterns
-/// matched against paths relative to `root`. Generated Rust files with common generated-file
-/// headers are skipped.
+/// Returns `(findings, files_scanned, files_skipped)` where `files_skipped` counts files
+/// omitted because they carry a generated-file header.
 pub fn scan_directory(
     root: &Path,
     excludes: &[String],
@@ -587,90 +298,88 @@ pub fn scan_directory(
 
 /// Like [`scan_directory`] but runs `checks` instead of [`default_checks`].
 ///
-/// Returns `(results, files_scanned, files_skipped)`, where `files_skipped` counts files
-/// skipped because they carry a generated-file header (see [`scan_directory`]).
+/// Returns `(results, files_scanned, files_skipped)` where each element of `results` groups
+/// findings by source file, and `files_skipped` counts files omitted due to generated-file
+/// headers (see [`scan_directory`]).
 pub fn scan_directory_with_checks(
     root: &Path,
     excludes: &[String],
     includes: &[String],
     checks: &[Box<dyn Check + Send + Sync>],
-) -> Result<(Vec<Finding>, usize, usize), ScanError> {
+) -> Result<(Vec<FileScanResult>, usize, usize), ScanError> {
     let root = root.canonicalize()?;
     let (paths, files_skipped) = collect_rust_paths(&root, excludes, includes)?;
     let files_scanned = paths.len();
 
-    let mut findings: Vec<Finding> = paths
-        .par_iter()
-        .map(|path| run_checks_for_file(path, &root, checks))
-        .collect::<Result<Vec<Vec<Finding>>, ScanError>>()?
-        .into_iter()
-        .flatten()
-        .collect();
-
-    let mut files_skipped = 0;
-    let mut scan_paths = Vec::new();
-    for path in paths {
-        if has_generated_file_header(&path)? {
-            files_skipped += 1;
-            continue;
-        }
-        scan_paths.push(path);
-    }
-
-    let files_scanned = scan_paths.len();
-    let results: Vec<FileScanResult> = scan_paths
+    let mut results: Vec<FileScanResult> = paths
         .par_iter()
         .map(|path| {
-            let content = std::fs::read_to_string(path)?;
-            let syn_file = syn::parse_file(&content).map_err(|e| ScanError::Parse {
-                path: path.clone(),
-                message: e.to_string(),
-            })?;
-            let file_label = path
-                .strip_prefix(&root)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .to_string();
-            let mut findings: Vec<Finding> = checks
-                .iter()
-                .flat_map(|check| {
-                    let check_name = check.name().to_string();
-                    match catch_unwind(AssertUnwindSafe(|| check.run(&syn_file, &content))) {
-                        Ok(mut hits) => {
-                            for f in &mut hits {
-                                f.file_path.clone_from(&file_label);
-                            }
-                            hits
-                        }
-                        Err(payload) => {
-                            let message = if let Some(msg) = payload.downcast_ref::<&str>() {
-                                msg.to_string()
-                            } else if let Some(msg) = payload.downcast_ref::<String>() {
-                                msg.clone()
-                            } else {
-                                "panic payload was not a string".to_string()
-                            };
-                            eprintln!(
-                                "warning: {}",
-                                ScanError::CheckPanic {
-                                    check: check_name,
-                                    path: path.clone(),
-                                    message,
-                                }
-                            );
-                            Vec::new()
-                        }
-                    }
-                })
-                .collect();
-            findings.sort_by_key(|f| f.line);
-            dedup_findings(&mut findings);
+            let findings = run_checks_for_file(path, &root, checks)?;
+            let file_label = if root.is_file() {
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string()
+            } else {
+                path.strip_prefix(&root)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .to_string()
+            };
             Ok(FileScanResult { file_path: file_label, findings })
         })
         .collect::<Result<Vec<_>, ScanError>>()?;
 
     results.sort_by(|a, b| a.file_path.cmp(&b.file_path));
     Ok((results, files_scanned, files_skipped))
+}
+
+/// Scan an explicit list of `.rs` file paths and aggregate findings from every default check.
+///
+/// `root` is used only to compute relative file labels in findings (same convention as
+/// [`scan_directory`]). `excludes` are glob patterns matched against each file's path
+/// relative to `root`; matching files are skipped.
+///
+/// Returns `(findings, files_scanned)`.
+pub fn scan_files(
+    paths: &[PathBuf],
+    root: &Path,
+    excludes: &[String],
+) -> Result<(Vec<Finding>, usize), ScanError> {
+    let root = root.canonicalize()?;
+    let exclude_patterns: Vec<glob::Pattern> = excludes
+        .iter()
+        .filter_map(|p| glob::Pattern::new(p).ok())
+        .collect();
+
+    let filtered: Vec<&PathBuf> = paths
+        .iter()
+        .filter(|path| {
+            let label = path.strip_prefix(&root).unwrap_or(path.as_path());
+            !exclude_patterns
+                .iter()
+                .any(|pat| pat.matches_path(label) || pat.matches_path(path))
+        })
+        .collect();
+
+    let files_scanned = filtered.len();
+    let checks = default_checks();
+
+    let mut findings: Vec<Finding> = filtered
+        .par_iter()
+        .map(|path| run_checks_for_file(path, &root, &checks))
+        .collect::<Result<Vec<Vec<Finding>>, ScanError>>()?
+        .into_iter()
+        .flatten()
+        .collect();
+
+    findings.sort_by(|a, b| {
+        a.file_path
+            .cmp(&b.file_path)
+            .then_with(|| a.line.cmp(&b.line))
+    });
+
+    Ok((findings, files_scanned))
 }
 
 #[cfg(test)]
@@ -923,11 +632,4 @@ mod dedup_tests {
 
         fs::remove_dir_all(root).unwrap();
     }
-    findings.sort_by(|a, b| {
-        a.file_path
-            .cmp(&b.file_path)
-            .then_with(|| a.line.cmp(&b.line))
-    });
-    dedup_findings(&mut findings);
-    Ok((findings, files_scanned, files_skipped))
 }
