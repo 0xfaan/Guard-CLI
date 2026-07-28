@@ -528,3 +528,22 @@ Off-chain-signed meta-transactions (e.g. permit-style flows, delegated actions) 
 - Validation done inside a helper function called from the flagged method is not visible to this check.
 
 **Fixture:** `test-contracts/nonce-vulnerable/`, `test-contracts/nonce-safe/`
+
+---
+
+## `uninitialized-storage-read` (High)
+
+**What it detects**
+
+In `#[contractimpl]` methods: a storage read (`.storage().<tier>().get(...)` or `.get_unchecked(...)`) with `.unwrap()` or `.expect(...)` chained directly onto it, with no prior `has()` guard.
+
+**Why it matters**
+
+Reading uninitialized storage in Soroban returns `None`; calling `.unwrap()` or `.expect(...)` on it panics and aborts the contract invocation. This can brick a contract for legitimate callers or be triggered intentionally by an attacker to cause a denial of service.
+
+**Limitations**
+
+- Only flags `.unwrap()`/`.expect(...)` chained directly onto the `.get(...)` call; a read stored in an intermediate variable before unwrapping is not tracked.
+- Does not check whether a preceding `has()` guard exists earlier in the function body.
+
+**Fixture:** tests in `crates/checks/src/uninitialized_storage_read.rs`
