@@ -223,7 +223,6 @@ Inside a single `#[contractimpl]` method: a storage write (`set`, `remove`, `ext
 
 - Tracks a single, linear path through one method body; writes and calls reached through different branches of an `if`/`match`, or made from a helper function, are not correlated.
 - A storage read anywhere after the write clears the finding, even if it doesn't actually re-validate the state used by the subsequent `invoke_contract` call.
-- This check is implemented and unit-tested but not yet included in `default_checks()` — it does not currently run as part of a default `soroban-guard` scan.
 
 **Fixture:** tests in `crates/checks/src/reentrancy.rs`
 
