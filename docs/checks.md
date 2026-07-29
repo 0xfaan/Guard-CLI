@@ -28,6 +28,27 @@ Contract state updates should be gated. This rule recognizes both `env.require_a
 
 ---
 
+## `auth-after-storage-write` (High)
+
+**Status:** Phase 1
+
+**What it detects**
+
+In a `#[contractimpl]` method, a storage mutation through `env.storage()` (`set`, `remove`, `extend_ttl`, `bump`, or `append`) occurs before any call to `env.require_auth()` or `env.require_auth_for_args()` on the same `Env` binding.
+
+**Why it matters**
+
+Authorization should happen before state mutation. If a contract writes to storage before requiring auth, an attacker may influence state changes without being authorized.
+
+**Limitations**
+
+- Only the `Env` binding named `env` or the explicit environment parameter name is recognized.
+- Static analysis cannot see auth enforced inside helper functions or via dataflow beyond the method body.
+
+**Fixture:** `test-contracts/auth-order-vulnerable/`, `test-contracts/auth-order-safe/`
+
+---
+
 ## `unchecked-arithmetic` (High / Medium / Low)
 
 **Status:** Phase 2
