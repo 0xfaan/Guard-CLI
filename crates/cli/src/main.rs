@@ -48,9 +48,9 @@ enum Commands {
         /// Print additional scan statistics such as skipped generated files
         #[arg(long)]
         verbose: bool,
-        /// Only scan files matching this glob pattern (e.g. `src/token*.rs`)
-        #[arg(long)]
-        include: Option<String>,
+        /// Only scan files matching this glob pattern (e.g. `src/token*.rs`); may be repeated
+        #[arg(long, value_name = "PATTERN")]
+        include: Vec<String>,
         /// Exclude files matching this glob pattern (e.g. `src/proxy.rs`); may be repeated
         #[arg(long, value_name = "PATTERN")]
         exclude: Vec<String>,
@@ -158,7 +158,7 @@ fn main() {
             let extra_sensitive = &cfg.checks.sensitive_names.extra;
             let active_checks = default_checks_with_config(&all_disabled, extra_sensitive);
 
-            let includes: Vec<String> = include.into_iter().collect();
+            let includes: Vec<String> = include;
             match scan_directory_with_checks(&path, &exclude, &includes, &active_checks) {
                 Ok((results, files_scanned, files_skipped)) => {
                     let findings: Vec<Finding> =
