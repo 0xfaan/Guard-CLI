@@ -29,7 +29,7 @@ Common causes:
 | Check | Known false-positive sources | Full details |
 |---|---|---|
 | `missing-require-auth` | Auth delegated to a helper function; `Env` param named something other than `env` | [checks.md#missing-require-auth](checks.md#missing-require-auth) |
-| `unchecked-arithmetic` | Severity is name-based; a variable named `amount` in non-financial context gets High | [checks.md#unchecked-arithmetic](checks.md#unchecked-arithmetic) |
+| `unchecked-arithmetic` | Severity is name-based; a variable named `amount` in non-financial context gets High. A `checked_*`/`saturating_*` call on a pair of operands suppresses unchecked binary operations on the *same* operands anywhere in the function body, even if the unchecked operation is not actually guarded by that specific check. | [checks.md#unchecked-arithmetic](checks.md#unchecked-arithmetic) |
 | `unprotected-admin` | Any `require_auth` anywhere in the body clears the finding; auth inside a helper is not seen | [checks.md#unprotected-admin](checks.md#unprotected-admin) |
 | `unsafe-storage-patterns` | `Symbol::new` with a `const` or macro-expanded literal may be flagged as a dynamic key | [checks.md#unsafe-storage-patterns](checks.md#unsafe-storage-patterns) |
 | `unsafe-cross-contract-input` | Validation in a helper called after the assignment is not tracked | [checks.md#unsafe-cross-contract-input](checks.md#unsafe-cross-contract-input) |
