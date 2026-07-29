@@ -1,6 +1,6 @@
 //! Privileged-style entrypoints without any `require_auth` / `require_auth_for_args` call.
 
-use crate::util::contractimpl_functions_excluding_test;
+use crate::util::{contractimpl_functions_excluding_test, receiver_chain_contains_storage};
 use crate::{Check, Finding, Severity};
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
@@ -106,19 +106,6 @@ fn is_sensitive_name(name: &str, extra: &[String]) -> bool {
             .iter()
             .any(|prefix| name.starts_with(prefix))
         || extra.iter().any(|e| e == name)
-}
-
-fn receiver_chain_contains_storage(expr: &Expr) -> bool {
-    match expr {
-        Expr::MethodCall(m) => {
-            if m.method == "storage" {
-                return true;
-            }
-            receiver_chain_contains_storage(&m.receiver)
-        }
-        Expr::Field(f) => receiver_chain_contains_storage(&f.base),
-        _ => false,
-    }
 }
 
 fn is_storage_read_call(m: &ExprMethodCall) -> bool {

@@ -62,6 +62,7 @@ impl AllFindingsContract {
     }
 
     // Triggers `delegate-call-risk`: callee address is read from storage before invocation.
+    // Also triggers `uninitialized-storage-read`: the read is `.unwrap()`-ed with no guard.
     pub fn delegate_from_storage(env: Env) {
         let callee: Address = env
             .storage()
@@ -146,7 +147,10 @@ impl AllFindingsContract {
         }
     }
 
-    // Triggers `panic-in-contract`: unwrap can panic with a generic runtime error.
+    // Triggers `uninitialized-storage-read`: `.get(…)` is `.unwrap()`-ed with no `has()`
+    // guard. This does *not* also trigger `panic-in-contract` — that check skips
+    // `.unwrap()`/`.expect(…)` chained directly onto a storage read so the two checks don't
+    // double-report the same line (see docs/checks.md).
     pub fn unwrap_storage(env: Env) -> i128 {
         env.storage()
             .instance()
@@ -165,8 +169,9 @@ impl AllFindingsContract {
         let _ = HashMap::<u32, u32>::new();
     }
 
-    // Keeps publish metadata examples realistic by including currently common Soroban
-    // parameter types.
+    // Triggers `unprotected-contract-deployment`: `env.deployer()` is used with no
+    // `require_auth()` call. Also keeps publish metadata examples realistic by including
+    // currently common Soroban parameter types.
     pub fn upload_without_auth(env: Env, wasm: Bytes) {
         env.deployer().upload_contract_wasm(&wasm);
     }
@@ -177,5 +182,38 @@ impl AllFindingsContract {
             CALL_COUNT += 1;
             CALL_COUNT
         }
+    }
+
+    // Triggers `missing-event-for-admin-change`: admin-style method mutates storage
+    // without a paired `env.events().publish(…)` call.
+    pub fn set_admin(env: Env, new_admin: Address) {
+        env.require_auth();
+        env.storage().instance().set(&symbol_short!("admin"), &new_admin);
+    }
+
+    // Triggers `unprotected-token-mint`: mint-style entrypoint has no auth gate.
+    pub fn mint(_env: Env, _to: Address, _amount: i128) {}
+
+    // Triggers `unprotected-upgrade`: upgrade-style entrypoint has no auth gate.
+    pub fn set_wasm(_env: Env, _new_wasm_hash: soroban_sdk::BytesN<32>) {}
+
+    // Triggers `unchecked-token-amount`: transfer amount is not validated before the call.
+    pub fn send_tokens(env: Env, token: Address, to: Address, amount: i128) {
+        let client = soroban_sdk::token::Client::new(&env, &token);
+        client.transfer(&env.current_contract_address(), &to, &amount);
+    }
+
+    // Triggers `missing-nonce`: state-mutating method with an `Address` parameter lacks
+    // replay protection.
+    pub fn update_profile(env: Env, user: Address) {
+        env.require_auth();
+        env.storage().instance().set(&symbol_short!("profile"), &user);
+    }
+
+    // Triggers `missing-input-length-bound`: `Bytes` parameter is used without a length
+    // check.
+    pub fn store_payload(env: Env, payload: Bytes) {
+        env.require_auth();
+        env.storage().instance().set(&symbol_short!("payload"), &payload);
     }
 }

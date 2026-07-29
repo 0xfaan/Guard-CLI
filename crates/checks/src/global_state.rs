@@ -13,37 +13,53 @@ impl Check for MutableGlobalStateCheck {
     }
 
     fn run(&self, file: &File, _source: &str) -> Vec<Finding> {
-        file.items
-            .iter()
-            .filter_map(|item| {
-                if let Item::Static(ItemStatic { mutability, ident, .. }) = item {
-                    if matches!(mutability, syn::StaticMutability::Mut(_)) {
-                        return Some(Finding {
-                            check_name: CHECK_NAME.to_string(),
-                            severity: Severity::High,
-                            file_path: String::new(),
-                            line: ident.span().start().line,
-                            function_name: String::new(),
-                            description: format!(
-                                "`static mut {ident}` introduces mutable global state. \
-                                 In Soroban, contract instances are stateless between \
-                                 invocations — `static mut` is unsafe and its value is \
-                                 not persisted on-chain."
-                            ),
-                            rule_url: Some(
-                                "https://github.com/SorobanGuard/Guard-CLI/blob/main/docs/checks.md#mutable-global-state-high"
-                                    .to_string(),
-                            ),
-                            suggestion: Some(
-                                "Replace `static mut` with `env.storage().persistent()` or `env.storage().instance()` for on-chain state."
-                                    .to_string(),
-                            ),
-                        });
-                    }
+        let mut statics = Vec::new();
+        collect_static_items(&file.items, &mut statics);
+
+        statics
+            .into_iter()
+            .filter_map(|ItemStatic { mutability, ident, .. }| {
+                if matches!(mutability, syn::StaticMutability::Mut(_)) {
+                    return Some(Finding {
+                        check_name: CHECK_NAME.to_string(),
+                        severity: Severity::High,
+                        file_path: String::new(),
+                        line: ident.span().start().line,
+                        function_name: String::new(),
+                        description: format!(
+                            "`static mut {ident}` introduces mutable global state. \
+                             In Soroban, contract instances are stateless between \
+                             invocations — `static mut` is unsafe and its value is \
+                             not persisted on-chain."
+                        ),
+                        rule_url: Some(
+                            "https://github.com/SorobanGuard/Guard-CLI/blob/main/docs/checks.md#mutable-global-state-high"
+                                .to_string(),
+                        ),
+                        suggestion: Some(
+                            "Replace `static mut` with `env.storage().persistent()` or `env.storage().instance()` for on-chain state."
+                                .to_string(),
+                        ),
+                    });
                 }
                 None
             })
             .collect()
+    }
+}
+
+/// Every `static` item in the file, recursing into nested `mod` blocks.
+fn collect_static_items<'a>(items: &'a [Item], out: &mut Vec<&'a ItemStatic>) {
+    for item in items {
+        match item {
+            Item::Mod(m) => {
+                if let Some((_, nested)) = &m.content {
+                    collect_static_items(nested, out);
+                }
+            }
+            Item::Static(item_static) => out.push(item_static),
+            _ => {}
+        }
     }
 }
 

@@ -6,6 +6,35 @@ use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 use syn::{Expr, ExprCall, ExprMethodCall, File};
 
+/// Returns true when `expr` is `.get(…)`/`.get_unchecked(…)` chained onto a `.storage()`
+/// receiver — the same pattern `uninitialized_storage_read::UninitializedStorageReadCheck`
+/// reports on its own, more specific, `uninitialized-storage-read` finding. `unwrap`/`expect`
+/// calls matching this shape are left to that check instead of being double-reported here.
+fn is_storage_get(expr: &Expr) -> bool {
+    match expr {
+        Expr::MethodCall(m) => {
+            if m.method == "get" || m.method == "get_unchecked" {
+                return receiver_chain_contains_storage(&m.receiver);
+            }
+            is_storage_get(&m.receiver)
+        }
+        _ => false,
+    }
+}
+
+fn receiver_chain_contains_storage(expr: &Expr) -> bool {
+    match expr {
+        Expr::MethodCall(m) => {
+            if m.method == "storage" {
+                return true;
+            }
+            receiver_chain_contains_storage(&m.receiver)
+        }
+        Expr::Field(f) => receiver_chain_contains_storage(&f.base),
+        _ => false,
+    }
+}
+
 const CHECK_NAME: &str = "panic-in-contract";
 
 /// Flags `panic!`, `unreachable!`, `.unwrap()`, and `.expect(…)` inside
@@ -77,7 +106,7 @@ impl<'ast> Visit<'ast> for PanicVisitor<'_> {
 
     fn visit_expr_method_call(&mut self, i: &'ast ExprMethodCall) {
         let name = i.method.to_string();
-        if matches!(name.as_str(), "unwrap" | "expect") {
+        if matches!(name.as_str(), "unwrap" | "expect") && !is_storage_get(&i.receiver) {
             self.push(i.span().start().line, &format!(".{name}()"));
         }
         visit::visit_expr_method_call(self, i);
@@ -108,12 +137,12 @@ mod tests {
     #[test]
     fn flags_unwrap() {
         let hits = run(r#"
-use soroban_sdk::{contractimpl, Env, Symbol};
+use soroban_sdk::{contractimpl, Env};
 pub struct C;
 #[contractimpl]
 impl C {
-    pub fn f(env: Env) -> u32 {
-        env.storage().instance().get::<Symbol, u32>(&Symbol::new(&env, "k")).unwrap()
+    pub fn f(_env: Env) -> u32 {
+        Some(1u32).unwrap()
     }
 }
 "#);
@@ -124,12 +153,12 @@ impl C {
     #[test]
     fn flags_expect() {
         let hits = run(r#"
-use soroban_sdk::{contractimpl, Env, Symbol};
+use soroban_sdk::{contractimpl, Env};
 pub struct C;
 #[contractimpl]
 impl C {
-    pub fn f(env: Env) -> u32 {
-        env.storage().instance().get::<Symbol, u32>(&Symbol::new(&env, "k")).expect("missing")
+    pub fn f(_env: Env) -> u32 {
+        Some(1u32).expect("missing")
     }
 }
 "#);

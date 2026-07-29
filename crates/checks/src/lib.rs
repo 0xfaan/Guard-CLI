@@ -34,7 +34,7 @@ pub mod uninitialized_storage_read;
 pub mod unprotected_contract_deployment;
 pub mod unprotected_token_mint;
 pub mod unprotected_upgrade;
-mod util;
+pub mod util;
 
 pub use admin::UnprotectedAdminCheck;
 pub use annotations::MissingContractAnnotationCheck;
@@ -196,6 +196,7 @@ pub fn group_by_severity<'a>(findings: &'a [Finding]) -> BTreeMap<Severity, Vec<
 fn all_checks_base() -> Vec<Box<dyn Check + Send + Sync>> {
     vec![
         Box::new(MissingRequireAuthCheck),
+        Box::new(AuthAfterStorageWriteCheck),
         Box::new(UncheckedArithmeticCheck),
         Box::new(UnprotectedAdminCheck::new()),
         Box::new(UnsafeStoragePatternsCheck),
@@ -257,6 +258,7 @@ pub fn default_checks_with_config(
 ) -> Vec<Box<dyn Check + Send + Sync>> {
     let mut checks: Vec<Box<dyn Check + Send + Sync>> = vec![
         Box::new(MissingRequireAuthCheck),
+        Box::new(AuthAfterStorageWriteCheck),
         Box::new(UncheckedArithmeticCheck),
         Box::new(UnprotectedAdminCheck::with_extra_names(extra_sensitive_names.to_vec())),
         Box::new(UnsafeStoragePatternsCheck),

@@ -28,6 +28,27 @@ Contract state updates should be gated. This rule recognizes both `env.require_a
 
 ---
 
+## `auth-after-storage-write` (High)
+
+**Status:** Phase 1
+
+**What it detects**
+
+In a `#[contractimpl]` method, a storage mutation through `env.storage()` (`set`, `remove`, `extend_ttl`, `bump`, or `append`) occurs before any call to `env.require_auth()` or `env.require_auth_for_args()` on the same `Env` binding.
+
+**Why it matters**
+
+Authorization should happen before state mutation. If a contract writes to storage before requiring auth, an attacker may influence state changes without being authorized.
+
+**Limitations**
+
+- Only the `Env` binding named `env` or the explicit environment parameter name is recognized.
+- Static analysis cannot see auth enforced inside helper functions or via dataflow beyond the method body.
+
+**Fixture:** `test-contracts/auth-order-vulnerable/`, `test-contracts/auth-order-safe/`
+
+---
+
 ## `unchecked-arithmetic` (High / Medium / Low)
 
 **Status:** Phase 2
@@ -478,6 +499,10 @@ Inside `#[contractimpl]` methods: explicit `panic!()` and `unreachable!()` macro
 
 Panics abort the transaction with an unhelpful, generic error and can leave the contract in a partially-updated state if some storage writes already happened earlier in the call. Prefer `Result`-returning methods with typed errors, or `env.panic_with_error` for explicit, well-defined aborts.
 
+**Relationship to `uninitialized-storage-read`**
+
+`.unwrap()`/`.expect(...)` chained directly onto a storage `.get(...)`/`.get_unchecked(...)` call (e.g. `env.storage().persistent().get(&K).unwrap()`) is **not** flagged here — that exact pattern is reported once, as the more specific and more severe [`uninitialized-storage-read`](#uninitialized-storage-read-high) finding, instead of being double-reported by both checks.
+
 **Limitations**
 
 - Does not track `unwrap`/`expect` through re-exports or type aliases — only the literal method name is matched.
@@ -540,6 +565,10 @@ In `#[contractimpl]` methods: a storage read (`.storage().<tier>().get(...)` or 
 **Why it matters**
 
 Reading uninitialized storage in Soroban returns `None`; calling `.unwrap()` or `.expect(...)` on it panics and aborts the contract invocation. This can brick a contract for legitimate callers or be triggered intentionally by an attacker to cause a denial of service.
+
+**Relationship to `panic-in-contract`**
+
+This check owns the `storage.get(...).unwrap()`/`.expect(...)` pattern exclusively: [`panic-in-contract`](#panic-in-contract-medium) explicitly skips `.unwrap()`/`.expect(...)` calls chained onto a storage read so the same line isn't reported twice under two different check names.
 
 **Limitations**
 

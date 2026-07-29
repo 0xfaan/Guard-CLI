@@ -69,6 +69,8 @@ pub fn bootstrap(env: Env) {
 }
 ```
 
+Function-level suppressions are scoped to the specific `#[contractimpl]` block the annotation sits above — if two different contract types in the same file both define a same-named method (e.g. two `set_owner`), suppressing one does not suppress the other.
+
 Use suppressions for reviewed false positives only. Prefer fixing the code when the finding identifies a real deployability or security problem.
 
 ---
