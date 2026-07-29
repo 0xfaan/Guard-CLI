@@ -1,6 +1,8 @@
 use crate::{Check, Finding, Severity};
 use syn::visit::{self, Visit};
+use syn::spanned::Spanned;
 use syn::{ImplItem, ItemImpl};
+
 
 const CHECK_NAME: &str = "unprotected-token-mint";
 const MINT_NAMES: &[&str] = &["mint", "burn", "issue", "redeem", "create_tokens"];
