@@ -38,7 +38,7 @@ impl Check for DelegateCallRiskCheck {
                 if let Some(line) = v.last_invoke_contract_line {
                     out.push(Finding {
                         check_name: CHECK_NAME.to_string(),
-                        severity: Severity::Medium,
+                        severity: Severity::High,
                         file_path: String::new(),
                         line,
                         function_name: fn_name.to_string(),
@@ -128,7 +128,7 @@ impl C {
         )?;
         let hits = DelegateCallRiskCheck.run(&file, "");
         assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].severity, Severity::Medium);
+        assert_eq!(hits[0].severity, Severity::High);
         Ok(())
     }
 
