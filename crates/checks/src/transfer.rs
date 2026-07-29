@@ -34,7 +34,7 @@ impl Check for SelfTransferCheck {
             let line = method.sig.fn_token.span().start().line;
             out.push(Finding {
                 check_name: CHECK_NAME.to_string(),
-                severity: Severity::Low,
+                severity: Severity::Medium,
                 file_path: String::new(),
                 line,
                 function_name: fn_name.clone(),
@@ -140,6 +140,7 @@ impl C {
         )?;
         let hits = SelfTransferCheck.run(&file, "");
         assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].severity, Severity::Medium);
         assert_eq!(hits[0].function_name, "transfer");
         Ok(())
     }
