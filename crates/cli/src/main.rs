@@ -313,57 +313,7 @@ fn main() {
             let extra_sensitive = &cfg.checks.sensitive_names.extra;
             let active_checks = default_checks_with_config(&all_disabled, extra_sensitive);
 
-            let includes: Vec<String> = include.into_iter().collect();
-            let includes: Vec<String> = include;
-            match scan_directory_with_checks(&path, &exclude, &includes, &active_checks) {
-                Ok((results, files_scanned, files_skipped)) => {
-                    let findings: Vec<Finding> =
-                        results.into_iter().flat_map(|r| r.findings).collect();
-                    let should_fail = findings
-                        .iter()
-                        .any(|f| f.severity <= fail_threshold);
-
-                    if json {
-                        if !quiet || should_fail {
-                            match json_payload(&findings, files_scanned) {
-                                Ok(payload) => {
-                                    if let Some(ref out_path) = output {
-                                        if let Err(e) = write_output(out_path, &payload) {
-                                            eprintln!("{} {}", "error:".red().bold(), e);
-                                            std::process::exit(2);
-                                        }
-                                    } else {
-                                        println!("{payload}");
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("{} {}", "error:".red().bold(), e);
-                                    std::process::exit(2);
-                                }
-                            }
-                        }
-                    } else if sarif {
-                        if !quiet || should_fail {
-                            let payload =
-                                serde_json::to_string_pretty(&build_sarif(&findings)).unwrap();
-                            if let Some(ref out_path) = output {
-                                if let Err(e) = write_output(out_path, &payload) {
-                                    eprintln!("{} {}", "error:".red().bold(), e);
-                                    std::process::exit(2);
-                                }
-                            } else {
-                                println!("{payload}");
-                            }
-                        }
-                    } else if markdown {
-                        if !quiet || should_fail {
-                            print_markdown(&findings);
-                        }
-                    } else if !quiet || should_fail {
-                        let (display, truncated) = truncate(&findings, 0);
-                        print_pretty(display, files_scanned, path.display().to_string(), truncated);
-                    }
-
+            let includes = include.clone();
             // Build a ScanOptions struct to pass around cleanly.
             let opts = ScanOptions {
                 path: path.clone(),
@@ -375,7 +325,7 @@ fn main() {
                 verbose,
                 fail_threshold,
                 exclude: exclude.clone(),
-                includes: includes.clone(),
+                includes,
             };
 
             // Run the initial scan.

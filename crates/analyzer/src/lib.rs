@@ -402,10 +402,11 @@ pub fn scan_files(
     let filtered: Vec<&PathBuf> = paths
         .iter()
         .filter(|path| {
-            let label = path.strip_prefix(&root).unwrap_or(path.as_path());
+            let path_canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+            let label = path_canon.strip_prefix(&root).unwrap_or(&path_canon);
             !exclude_patterns
                 .iter()
-                .any(|pat| pat.matches_path(label) || pat.matches_path(path))
+                .any(|pat| pat.matches_path(label) || pat.matches_path(&path_canon))
         })
         .collect();
 

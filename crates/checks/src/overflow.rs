@@ -55,22 +55,33 @@ fn infer_severity(e: &ExprBinary) -> Severity {
 
 /// Returns true if `block` contains any `checked_*` or `saturating_*` method call,
 /// indicating the function already uses safe arithmetic and should not be flagged.
-fn uses_safe_arithmetic(block: &syn::Block) -> bool {
-    let mut v = SafeArithScan { found: false };
+fn uses_safe_arithmetic(block: &syn::Block, binary_expr: &ExprBinary) -> bool {
+    let mut v = SafeArithScan {
+        binary_expr,
+        found: false,
+    };
     v.visit_block(block);
     v.found
 }
 
-struct SafeArithScan {
+struct SafeArithScan<'a> {
+    binary_expr: &'a ExprBinary,
     found: bool,
 }
 
-impl<'ast> Visit<'ast> for SafeArithScan {
+impl<'ast> Visit<'ast> for SafeArithScan<'_> {
     fn visit_expr_method_call(&mut self, i: &'ast ExprMethodCall) {
         if !self.found {
             let name = i.method.to_string();
             if name.starts_with("checked_") || name.starts_with("saturating_") {
-                self.found = true;
+                if let Some(arg) = i.args.first() {
+                    let left = &*self.binary_expr.left;
+                    let right = &*self.binary_expr.right;
+                    let recv = &*i.receiver;
+                    if (left == recv && right == arg) || (right == recv && left == arg) {
+                        self.found = true;
+                    }
+                }
             }
         }
         visit::visit_expr_method_call(self, i);
@@ -96,12 +107,10 @@ impl Check for UncheckedArithmeticCheck {
     fn run(&self, file: &File, _source: &str) -> Vec<Finding> {
         let mut out = Vec::new();
         for method in contractimpl_functions_excluding_test(file) {
-            if uses_safe_arithmetic(&method.block) {
-                continue;
-            }
             let fn_name = method.sig.ident.to_string();
             let mut v = ArithVisitor {
                 fn_name: fn_name.clone(),
+                block: &method.block,
                 out: &mut out,
             };
             v.visit_block(&method.block);
@@ -127,12 +136,13 @@ fn is_unchecked_binary(e: &ExprBinary) -> bool {
 
 struct ArithVisitor<'a> {
     fn_name: String,
+    block: &'a syn::Block,
     out: &'a mut Vec<Finding>,
 }
 
 impl Visit<'_> for ArithVisitor<'_> {
     fn visit_expr_binary(&mut self, i: &ExprBinary) {
-        if is_unchecked_binary(i) {
+        if is_unchecked_binary(i) && !uses_safe_arithmetic(self.block, i) {
             let op = match &i.op {
                 BinOp::Add(_) => "+",
                 BinOp::Sub(_) => "-",
@@ -321,6 +331,28 @@ impl C {
         let hits = UncheckedArithmeticCheck.run(&file, "");
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].severity, Severity::Low);
+        Ok(())
+    }
+
+    #[test]
+    fn flags_unguarded_arithmetic_despite_guarded_arithmetic_in_same_function() -> Result<(), syn::Error> {
+        let file = parse_file(
+            r#"
+use soroban_sdk::{contractimpl, Env};
+pub struct C;
+#[contractimpl]
+impl C {
+    pub fn f(env: Env, a: i128, b: i128) -> i128 {
+        let _ = env;
+        let _ = a.checked_add(1);
+        b + a
+    }
+}
+"#,
+        )?;
+        let hits = UncheckedArithmeticCheck.run(&file, "");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].severity, Severity::Medium);
         Ok(())
     }
 }

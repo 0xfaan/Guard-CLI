@@ -1,6 +1,9 @@
 use crate::{Check, Finding, Severity};
 use syn::visit::{self, Visit};
+use syn::spanned::Spanned;
+use quote::ToTokens;
 use syn::{ExprMethodCall, Block};
+
 
 const CHECK_NAME: &str = "unchecked-token-amount";
 const TRANSFER_METHODS: &[&str] = &["transfer", "transfer_from", "xfer", "mint"];
