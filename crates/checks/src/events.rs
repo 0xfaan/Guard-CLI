@@ -1,7 +1,10 @@
 
 //! Detection of state-changing functions (storage writes) without event emission.
 
-use crate::util::contractimpl_functions_excluding_test;
+use crate::util::{
+    contractimpl_functions_excluding_test, receiver_chain_contains_events,
+    receiver_chain_contains_storage,
+};
 use crate::{Check, Finding, Severity};
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
@@ -46,19 +49,6 @@ impl Check for MissingEventEmissionCheck {
     }
 }
 
-fn receiver_chain_contains_storage(expr: &Expr) -> bool {
-    match expr {
-        Expr::MethodCall(m) => {
-            if m.method == "storage" {
-                return true;
-            }
-            receiver_chain_contains_storage(&m.receiver)
-        }
-        Expr::Field(f) => receiver_chain_contains_storage(&f.base),
-        _ => false,
-    }
-}
-
 fn is_storage_mutation_call(m: &ExprMethodCall) -> bool {
     let name = m.method.to_string();
     if !matches!(
@@ -68,19 +58,6 @@ fn is_storage_mutation_call(m: &ExprMethodCall) -> bool {
         return false;
     }
     receiver_chain_contains_storage(&m.receiver)
-}
-
-fn receiver_chain_contains_events(expr: &Expr) -> bool {
-    match expr {
-        Expr::MethodCall(m) => {
-            if m.method == "events" {
-                return true;
-            }
-            receiver_chain_contains_events(&m.receiver)
-        }
-        Expr::Field(f) => receiver_chain_contains_events(&f.base),
-        _ => false,
-    }
 }
 
 fn is_event_publish_call(m: &ExprMethodCall) -> bool {

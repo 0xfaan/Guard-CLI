@@ -1,6 +1,6 @@
 //! Shared helpers for walking `#[contractimpl]` impl blocks.
 
-use syn::{ImplItem, Item, ItemImpl};
+use syn::{Expr, ImplItem, Item, ItemImpl};
 
 pub fn is_contractimpl(item_impl: &ItemImpl) -> bool {
     item_impl
@@ -69,6 +69,62 @@ mod tests {
         assert_eq!(methods.len(), 1);
         assert_eq!(methods[0].sig.ident.to_string(), "live");
         Ok(())
+    }
+}
+
+/// Does the receiver chain of `expr` contain a call to `.storage()`?
+pub(crate) fn receiver_chain_contains_storage(expr: &Expr) -> bool {
+    match expr {
+        Expr::MethodCall(m) => {
+            if m.method == "storage" {
+                return true;
+            }
+            receiver_chain_contains_storage(&m.receiver)
+        }
+        Expr::Field(f) => receiver_chain_contains_storage(&f.base),
+        _ => false,
+    }
+}
+
+/// Does the receiver chain of `expr` contain a call to `.events()`?
+pub(crate) fn receiver_chain_contains_events(expr: &Expr) -> bool {
+    match expr {
+        Expr::MethodCall(m) => {
+            if m.method == "events" {
+                return true;
+            }
+            receiver_chain_contains_events(&m.receiver)
+        }
+        Expr::Field(f) => receiver_chain_contains_events(&f.base),
+        _ => false,
+    }
+}
+
+/// Does the receiver chain of `expr` contain a call to `.temporary()`?
+pub(crate) fn receiver_chain_contains_temporary(expr: &Expr) -> bool {
+    match expr {
+        Expr::MethodCall(m) => {
+            if m.method == "temporary" {
+                return true;
+            }
+            receiver_chain_contains_temporary(&m.receiver)
+        }
+        Expr::Field(f) => receiver_chain_contains_temporary(&f.base),
+        _ => false,
+    }
+}
+
+/// Does the receiver chain of `expr` contain a call to `.persistent()`?
+pub(crate) fn receiver_chain_contains_persistent(expr: &Expr) -> bool {
+    match expr {
+        Expr::MethodCall(m) => {
+            if m.method == "persistent" {
+                return true;
+            }
+            receiver_chain_contains_persistent(&m.receiver)
+        }
+        Expr::Field(f) => receiver_chain_contains_persistent(&f.base),
+        _ => false,
     }
 }
 

@@ -4,7 +4,7 @@
 //! `env.storage().*.set(…, &binding)` without any intervening `if`, `match`, or
 //! `unwrap_or*` / `ok_or*` / `checked_*` call.
 
-use crate::util::contractimpl_functions_excluding_test;
+use crate::util::{contractimpl_functions_excluding_test, receiver_chain_contains_storage};
 use crate::{Check, Finding, Severity};
 use std::collections::HashSet;
 use syn::spanned::Spanned;
@@ -55,18 +55,6 @@ fn is_invoke_contract(e: &Expr) -> bool {
                 }
             }
             false
-        }
-        _ => false,
-    }
-}
-
-fn receiver_chain_contains_storage(expr: &Expr) -> bool {
-    match expr {
-        Expr::MethodCall(m) => {
-            if m.method == "storage" {
-                return true;
-            }
-            receiver_chain_contains_storage(&m.receiver)
         }
         _ => false,
     }

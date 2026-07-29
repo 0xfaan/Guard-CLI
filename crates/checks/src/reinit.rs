@@ -1,7 +1,7 @@
 //! Flags `initialize`/`init`/`setup` functions in `#[contractimpl]` that do not guard
 //! against being called more than once.
 
-use crate::util::contractimpl_functions_excluding_test;
+use crate::util::{contractimpl_functions_excluding_test, receiver_chain_contains_storage};
 use crate::{Check, Finding, Severity};
 use syn::visit::{self, Visit};
 use syn::{Expr, ExprMethodCall, File};
@@ -55,19 +55,6 @@ impl Check for ReInitializationRiskCheck {
 
 fn is_init_fn(name: &str) -> bool {
     name.contains("init") || name.contains("setup")
-}
-
-fn receiver_chain_contains_storage(expr: &Expr) -> bool {
-    match expr {
-        Expr::MethodCall(m) => {
-            if m.method == "storage" {
-                return true;
-            }
-            receiver_chain_contains_storage(&m.receiver)
-        }
-        Expr::Field(f) => receiver_chain_contains_storage(&f.base),
-        _ => false,
-    }
 }
 
 #[derive(Default)]
