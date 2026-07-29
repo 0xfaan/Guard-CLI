@@ -512,6 +512,25 @@ Panics abort the transaction with an unhelpful, generic error and can leave the 
 
 ---
 
+## `missing-ttl-extension` (Low)
+
+**What it detects**
+
+In `#[contractimpl]` methods, writes to persistent storage (`env.storage().persistent().set(...)`, `remove(...)`, or `append(...)`) that are not followed by an `env.storage().persistent().extend_ttl(...)` call in the same function.
+
+**Why it matters**
+
+Persistent contract storage entries eventually expire. Without an explicit TTL extension, the ledger can archive the data and later reads may fail or behave unexpectedly.
+
+**Limitations**
+
+- Only checks for direct persistent writes and TTL extension calls in the same function body.
+- Does not analyze helper functions or control-flow paths that extend TTL elsewhere.
+
+**Fixture:** `test-contracts/ttl-vulnerable/`, `test-contracts/ttl-safe/`
+
+---
+
 ## `large-loop` (Medium)
 
 **What it detects**
