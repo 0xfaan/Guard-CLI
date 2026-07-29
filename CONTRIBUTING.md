@@ -143,6 +143,11 @@ Use [`crates/checks/src/auth.rs`](crates/checks/src/auth.rs) as the canonical la
 
 6. **Fixture crates** — Add `test-contracts/<rule>-vulnerable/` and `test-contracts/<rule>-safe/` (see below).
 
+7. **Update the all-findings example** — `CHANGELOG.md` claims `examples/all-findings/src/lib.rs`
+   "intentionally triggers every default check." Add a function there demonstrating your new rule
+   (with a `// Triggers <rule-name>` comment) so that claim stays true — this is easy to forget
+   since nothing enforces it automatically.
+
 ---
 
 ## How to write test contracts

@@ -35,6 +35,32 @@ pub fn contractimpl_functions_excluding_test(file: &syn::File) -> Vec<&syn::Impl
     out
 }
 
+/// The enclosing type's name for a `#[contractimpl]` block (e.g. `TokenContract` from
+/// `impl TokenContract { ... }` or `impl Trait for TokenContract { ... }`). Empty string if
+/// the self type isn't a simple path.
+pub fn impl_type_name(item_impl: &ItemImpl) -> String {
+    match &*item_impl.self_ty {
+        syn::Type::Path(type_path) => type_path
+            .path
+            .segments
+            .last()
+            .map(|seg| seg.ident.to_string())
+            .unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
+/// Like [`contractimpl_functions_excluding_test`] but paired with the name of the enclosing
+/// type, so callers can disambiguate same-named methods on two different `#[contractimpl]`
+/// types in the same file.
+pub fn contractimpl_functions_with_type_excluding_test(
+    file: &syn::File,
+) -> Vec<(String, &syn::ImplItemFn)> {
+    let mut out = Vec::new();
+    collect_contractimpl_fns_with_type(&file.items, false, &mut out);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,6 +174,35 @@ fn collect_contractimpl_fns<'a>(
                 for impl_item in &item_impl.items {
                     if let ImplItem::Fn(m) = impl_item {
                         out.push(m);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_contractimpl_fns_with_type<'a>(
+    items: &'a [Item],
+    in_test_mod: bool,
+    out: &mut Vec<(String, &'a syn::ImplItemFn)>,
+) {
+    for item in items {
+        match item {
+            Item::Mod(m) => {
+                let is_test = in_test_mod
+                    || is_cfg_test(&m.attrs)
+                    || m.ident == "tests"
+                    || m.ident == "test";
+                if let Some((_, nested)) = &m.content {
+                    collect_contractimpl_fns_with_type(nested, is_test, out);
+                }
+            }
+            Item::Impl(item_impl) if !in_test_mod && is_contractimpl(item_impl) => {
+                let type_name = impl_type_name(item_impl);
+                for impl_item in &item_impl.items {
+                    if let ImplItem::Fn(m) = impl_item {
+                        out.push((type_name.clone(), m));
                     }
                 }
             }

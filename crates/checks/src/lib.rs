@@ -34,7 +34,7 @@ pub mod uninitialized_storage_read;
 pub mod unprotected_contract_deployment;
 pub mod unprotected_token_mint;
 pub mod unprotected_upgrade;
-mod util;
+pub mod util;
 
 pub use admin::UnprotectedAdminCheck;
 pub use annotations::MissingContractAnnotationCheck;
