@@ -761,6 +761,14 @@ fn hyperlink(url: &str, text: &str) -> String {
     }
 }
 
+fn style_check_name(check_name: &str, severity: Severity) -> String {
+    match severity {
+        Severity::High => check_name.red().bold().to_string(),
+        Severity::Medium => check_name.magenta().to_string(),
+        Severity::Low => check_name.white().dimmed().to_string(),
+    }
+}
+
 fn print_pretty(
     findings: &[Finding],
     files_scanned: usize,
@@ -791,11 +799,7 @@ fn print_pretty(
                 Severity::Medium => "MEDIUM".magenta().bold(),
                 Severity::Low => "LOW".white(),
             };
-            let check = match f.severity {
-                Severity::High => f.check_name.red(),
-                Severity::Medium => f.check_name.magenta(),
-                Severity::Low => f.check_name.white(),
-            };
+            let check = style_check_name(&f.check_name, f.severity);
             println!(
                 "  {}  {}  {}  {}",
                 format!("[{}]", i + 1).dimmed(),
@@ -835,6 +839,7 @@ fn print_pretty(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use colored::control;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn sample_finding(check_name: &str, severity: Severity, line: usize) -> Finding {
@@ -1005,6 +1010,16 @@ mod tests {
             summary_text(&findings, 6),
             "1 High, 1 Medium, 0 Low — across 6 file(s)"
         );
+    }
+
+    #[test]
+    fn check_name_styling_is_bold_for_high_and_dimmed_for_low() {
+        control::set_override(true);
+        let high = style_check_name("high-check", Severity::High);
+        let low = style_check_name("low-check", Severity::Low);
+
+        assert!(high.contains("\u{1b}[1m"), "high check name should be bold");
+        assert!(low.contains("\u{1b}[2m"), "low check name should be dimmed");
     }
 
     #[test]
